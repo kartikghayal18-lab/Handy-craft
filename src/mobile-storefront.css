@@ -1,4 +1,5 @@
 /* Dedicated phone storefront layer. Desktop keeps its existing composition. */
+/* Kept as a separate late import so phone rules intentionally override desktop defaults. */
 .mobile-store-header,.mobile-hero{display:none}
 
 @media (max-width:768px){
