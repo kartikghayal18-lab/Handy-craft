@@ -1,2 +1,72 @@
-.product-overlay{padding:18px}.product-modal{position:relative;width:min(1040px,100%);max-height:92vh;overflow:auto;background:#f8f4ed;display:grid;grid-template-columns:1.04fr .96fr}.product-modal .modal-close{background:rgba(248,244,237,.94);border-radius:50%}.product-gallery{position:relative;background:#ddd0c2;min-height:620px;padding:22px}.product-main-image{height:475px;position:relative;overflow:hidden;background:#cdbdad}.product-main-image>img{width:100%;height:100%;object-fit:cover;object-position:center;display:block}.product-main-image>span{position:absolute;left:12px;bottom:12px;background:#f8f3eb;padding:7px 9px;font-size:9px;letter-spacing:.7px;text-transform:uppercase}.product-gallery-thumbs{display:flex;gap:9px;margin-top:10px}.product-gallery-thumbs button{width:70px;height:70px;border:2px solid transparent;padding:0;overflow:hidden}.product-gallery-thumbs button.is-active{border-color:#574038}.product-gallery-thumbs img{width:100%;height:100%;object-fit:cover}.product-gallery-thumbs button:nth-child(2) img{object-position:73% 50%}.product-photo-stack{position:absolute;right:-44px;bottom:18px;width:230px;height:200px;pointer-events:none}.product-photo-stack .mk-polaroid:nth-child(1){left:4%;top:18%;transform:rotate(-8deg)}.product-photo-stack .mk-polaroid:nth-child(2){left:46%;top:2%;transform:rotate(7deg)}.product-details{padding:62px 42px 33px}.product-details h2{font-size:44px;margin-bottom:9px}.modal-price{font-family:'DM Serif Display',serif;font-size:21px;display:block;margin-bottom:15px}.product-description{font-size:14px;line-height:1.55;color:#665a51;max-width:380px}.personalization-panel{margin:25px 0 17px;border-top:1px solid var(--line);padding-top:22px}.personalization-heading{display:flex;justify-content:space-between;gap:15px;align-items:start}.personalization-heading .eyebrow{margin-bottom:5px}.personalization-heading h3{font:25px 'DM Serif Display',serif;margin:0}.personalization-heading>span{font-size:9px;text-transform:uppercase;letter-spacing:.7px;padding:5px 6px;background:#e8d8c9}.personalization-panel>p{font-size:12px;line-height:1.45;color:#74685f}.upload-zone{background:#f1e7da;border:1px dashed #ad8f7e;margin-bottom:0}.upload-zone:hover{background:#eadccc}.upload-previews{display:flex;gap:9px;overflow:auto;padding:15px 3px 10px}.upload-previews .mk-polaroid{width:84px;height:101px;flex:0 0 auto;padding:4px 4px 16px}.upload-previews .mk-polaroid figcaption{font-size:8px;left:5px;bottom:4px}.preview-placement{height:112px;position:relative;overflow:hidden;background:#d9cab9;margin-top:8px}.preview-placement img{width:100%;height:100%;object-fit:cover;object-position:52% 58%;filter:saturate(.76)}.preview-placement span{position:absolute;left:9px;bottom:9px;background:#f8f3eb;padding:5px 6px;font:12px 'DM Serif Display',serif}.product-details .full{min-height:52px}.product-details .delivery{padding-bottom:8px}.cart-drawer{box-shadow:-12px 0 35px rgba(48,33,27,.16)}.cart-head{height:auto;min-height:82px}.cart-head .eyebrow{margin-bottom:3px}.cart-items{padding:22px 18px 120px}.cart-item{grid-template-columns:88px minmax(0,1fr) auto;gap:13px}.cart-item .product-art{height:104px}.cart-item-copy h3{font-size:20px}.cart-item-copy>p{font-size:11px;margin-bottom:4px}.cart-item-copy small{display:block;font-size:10px;color:#855c51;line-height:1.35}.cart-line-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:10px}.quantity-control{display:flex;border:1px solid var(--line);height:31px;align-items:center}.quantity-control button{width:29px;height:100%;font-size:16px}.quantity-control span{width:27px;text-align:center;font-size:12px}.cart-line-bottom strong{font-size:13px}.remove-item{font-size:10px;text-decoration:underline;align-self:start}.cart-summary{position:sticky;bottom:0;background:#f8f5ef;box-shadow:0 -8px 24px rgba(51,35,28,.08);padding-bottom:max(20px,env(safe-area-inset-bottom))}
-@media(max-width:700px){.product-overlay{align-items:end;padding:0}.product-modal{display:block;width:100%;max-height:94vh}.product-gallery{min-height:0;padding:0 0 18px}.product-main-image{height:310px}.product-gallery-thumbs{padding-left:16px}.product-gallery-thumbs button{width:58px;height:58px}.product-photo-stack{transform:scale(.72);transform-origin:right bottom;right:-20px;bottom:-11px}.product-details{padding:26px 20px 27px}.product-details h2{font-size:36px}.product-description{font-size:13px}.personalization-panel{margin-top:21px}.upload-zone{min-height:86px}.preview-placement{height:106px}.cart-items{padding-bottom:112px}.cart-item{grid-template-columns:78px minmax(0,1fr) auto}.cart-item .product-art{height:92px}.cart-summary{padding:17px 20px max(17px,env(safe-area-inset-bottom))}.cart-summary .primary{min-height:50px}}
+.product-overlay{padding:18px}
+.product-modal{position:relative;width:min(1040px,100%);max-height:92vh;overflow:auto;background:#f8f4ed;display:grid;grid-template-columns:1.04fr .96fr;border-radius:24px}
+.product-modal .modal-close{background:rgba(248,244,237,.94);border-radius:50%}
+.product-gallery{position:relative;background:var(--paper-deep);min-height:620px;padding:22px}
+.product-main-image{height:475px;position:relative;overflow:hidden;background:#cdbdad;border-radius:18px}
+.product-main-image>img{width:100%;height:100%;object-fit:cover;object-position:center;display:block;transition:transform .6s var(--ease)}
+.product-main-image>span{position:absolute;left:12px;bottom:12px;background:var(--cream);padding:7px 10px;font-size:9px;letter-spacing:.7px;text-transform:uppercase;border-radius:999px}
+.product-gallery-thumbs{display:flex;gap:9px;margin-top:10px}
+.product-gallery-thumbs button{width:70px;height:70px;border:2px solid transparent;padding:0;overflow:hidden;border-radius:12px;transition:border-color .25s}
+.product-gallery-thumbs button.is-active{border-color:var(--rose)}
+.product-gallery-thumbs img{width:100%;height:100%;object-fit:cover}
+.product-gallery-thumbs button:nth-child(2) img{object-position:73% 50%}
+.product-photo-stack{position:absolute;right:-44px;bottom:18px;width:230px;height:200px;pointer-events:none}
+.product-photo-stack .mk-polaroid:nth-child(1){left:4%;top:18%;transform:rotate(-8deg)}
+.product-photo-stack .mk-polaroid:nth-child(2){left:46%;top:2%;transform:rotate(7deg)}
+.product-details{padding:62px 42px 33px}
+.product-details h2{font-size:44px;margin-bottom:9px}
+.modal-price{font-family:'DM Serif Display',serif;font-size:21px;display:block;margin-bottom:15px}
+.product-description{font-size:14px;line-height:1.6;color:var(--ink-soft);max-width:380px}
+.personalization-panel{margin:25px 0 17px;border-top:1px solid var(--line);padding-top:22px}
+.personalization-heading{display:flex;justify-content:space-between;gap:15px;align-items:start}
+.personalization-heading .eyebrow{margin-bottom:5px}
+.personalization-heading h3{font:25px 'DM Serif Display',serif;margin:0}
+.personalization-heading>span{font-size:9px;text-transform:uppercase;letter-spacing:.7px;padding:6px 8px;background:var(--paper-deep);border-radius:999px}
+.personalization-panel>p{font-size:12px;line-height:1.5;color:var(--ink-soft)}
+.upload-zone{background:var(--paper);border:1px dashed var(--gold);margin-bottom:0;border-radius:14px}
+.upload-zone:hover{background:var(--paper-deep)}
+.upload-previews{display:flex;gap:9px;overflow:auto;padding:15px 3px 10px}
+.upload-previews .mk-polaroid{width:84px;height:101px;flex:0 0 auto;padding:4px 4px 16px}
+.upload-previews .mk-polaroid figcaption{font-size:8px;left:5px;bottom:4px}
+.preview-placement{height:112px;position:relative;overflow:hidden;background:var(--paper-deep);margin-top:8px;border-radius:12px}
+.preview-placement img{width:100%;height:100%;object-fit:cover;object-position:52% 58%;filter:saturate(.8)}
+.preview-placement span{position:absolute;left:9px;bottom:9px;background:var(--cream);padding:6px 8px;font:12px 'DM Serif Display',serif;border-radius:999px}
+.product-details .full{min-height:54px}
+.product-details .delivery{padding-bottom:8px}
+.cart-drawer{box-shadow:var(--shadow-lg)}
+.cart-head{height:auto;min-height:82px}
+.cart-head .eyebrow{margin-bottom:3px}
+.cart-items{padding:22px 18px 120px}
+.cart-item{grid-template-columns:88px minmax(0,1fr) auto;gap:13px}
+.cart-item .product-art{height:104px}
+.cart-item-copy h3{font-size:20px}
+.cart-item-copy>p{font-size:11px;margin-bottom:4px}
+.cart-item-copy small{display:block;font-size:10px;color:var(--rose-deep);line-height:1.4}
+.cart-line-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.quantity-control{display:flex;border:1px solid var(--line);height:33px;align-items:center;border-radius:999px;overflow:hidden}
+.quantity-control button{width:31px;height:100%;font-size:16px;transition:background .2s}
+.quantity-control button:hover{background:var(--paper)}
+.quantity-control span{width:27px;text-align:center;font-size:12px}
+.cart-line-bottom strong{font-size:13px}
+.remove-item{font-size:10px;text-decoration:underline;align-self:start}
+.cart-summary{position:sticky;bottom:0;background:var(--cream);box-shadow:0 -10px 26px rgba(37,26,18,.08);padding-bottom:max(20px,env(safe-area-inset-bottom))}
+@media(max-width:768px){
+  .product-overlay{align-items:end;padding:0}
+  .product-modal{display:block;width:100%;max-height:94vh;border-radius:20px 20px 0 0}
+  .product-gallery{min-height:0;padding:0 0 18px}
+  .product-main-image{height:310px;border-radius:0}
+  .product-gallery-thumbs{padding-left:16px}
+  .product-gallery-thumbs button{width:58px;height:58px}
+  .product-photo-stack{transform:scale(.72);transform-origin:right bottom;right:-20px;bottom:-11px}
+  .product-details{padding:26px 20px 27px}
+  .product-details h2{font-size:36px}
+  .product-description{font-size:13px}
+  .personalization-panel{margin-top:21px}
+  .upload-zone{min-height:86px}
+  .preview-placement{height:106px}
+  .cart-items{padding-bottom:112px}
+  .cart-item{grid-template-columns:78px minmax(0,1fr) auto}
+  .cart-item .product-art{height:92px}
+  .cart-summary{padding:17px 20px max(17px,env(safe-area-inset-bottom))}
+  .cart-summary .primary{min-height:52px}
+}
