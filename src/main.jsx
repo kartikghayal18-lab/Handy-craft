@@ -14,11 +14,46 @@ import './qa.css';
 import './mobile-storefront.css';
 import { getProducts } from './lib/supabase/products';
 import { createOrder } from './lib/supabase/orders';
-import { requireSupabase } from './lib/supabase/client';
+import { requireSupabase, supabase } from './lib/supabase/client';
 
 const categories = ['Birthday', 'Anniversary', 'Love', 'Friendship', 'Raksha Bandhan', 'Best Friend', 'Just Because', 'Custom'];
 const rupee = (amount) => `₹${amount.toLocaleString('en-IN')}`;
-const toStorefrontProduct = product => ({ ...product, price: Number(product.sale_price ?? product.price), regularPrice: Number(product.price), type: product.short_description || product.description || 'Personalized gift', badge: product.personalizable ? 'Personalizable' : null, categories: product.product_categories?.map(item=>item.category?.name).filter(Boolean)||[], art: 'bloom', for: [], image: product.main_image || product.product_images?.[0]?.public_url || '/images/memory-kraft-collection.png' });
+const FALLBACK_PRODUCT_IMAGE = '/images/memory-kraft-collection.png';
+const PRODUCT_IMAGE_BUCKET = 'product-images';
+
+// Normalizes whatever a product's image field actually holds into a usable <img> src.
+// Handles: a full http(s) URL (returned as-is, never re-resolved), a bucket-relative
+// storage path (resolved via supabase.storage.getPublicUrl), a JSON-stringified array
+// of paths/URLs, a real array of paths/URLs/{public_url|storage_path} objects, or a
+// single {public_url|storage_path} object. Returns null when nothing usable is found.
+function resolveImageUrl(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) { for (const entry of value) { const resolved = resolveImageUrl(entry); if (resolved) return resolved; } return null; }
+  if (typeof value === 'object') return resolveImageUrl(value.public_url || value.publicUrl || value.url || value.storage_path || value.path || null);
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed; // already a complete URL — do not call getPublicUrl again
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) { try { return resolveImageUrl(JSON.parse(trimmed)); } catch (_) { /* not JSON — fall through, treat as a plain path */ } }
+  if (!supabase) return null;
+  const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(trimmed.replace(/^\/+/, ''));
+  return data?.publicUrl || null;
+}
+
+// Every resolvable image for a product, in order (main_image first, then product_images
+// by position), de-duplicated. Falls back to the generic collection image if none resolve.
+function productImageList(product) {
+  const gallery = Array.isArray(product.product_images) ? [...product.product_images].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) : [];
+  const raw = [product.main_image, ...gallery.map(image => image?.public_url || image?.storage_path)];
+  const resolved = raw.map(resolveImageUrl).filter(Boolean);
+  return [...new Set(resolved)];
+}
+
+const toStorefrontProduct = product => {
+  const images = productImageList(product);
+  if (import.meta.env.DEV) console.debug('[image-debug] product', product.id, product.name, '-> main_image:', product.main_image, '| product_images:', product.product_images, '| resolved:', images);
+  return { ...product, price: Number(product.sale_price ?? product.price), regularPrice: Number(product.price), type: product.short_description || product.description || 'Personalized gift', badge: product.personalizable ? 'Personalizable' : null, categories: product.product_categories?.map(item=>item.category?.name).filter(Boolean)||[], art: 'bloom', for: [], image: images[0] || FALLBACK_PRODUCT_IMAGE, gallery: images.length ? images : [FALLBACK_PRODUCT_IMAGE] };
+};
 
 function Icon({ name, size = 20 }) {
   const paths = { search: <><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></>, bag: <><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></>, heart: <path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z"/>, menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>, home: <path d="m3 11 9-8 9 8v9H3z"/>, compass: <><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.2 5.4-4.6 1.6 2.2-5.4z"/></>, plus: <><path d="M12 5v14M5 12h14"/></>, close: <path d="M6 6l12 12M18 6 6 18"/>, arrow: <path d="M5 12h14m-6-6 6 6-6 6"/> };
@@ -27,7 +62,7 @@ function Icon({ name, size = 20 }) {
 
 function ProductArt({ kind, large = false, image }) { return <div className={`product-art ${kind} ${large ? 'large' : ''}`} aria-label="Photograph of a handmade Memory Kraft gift" role="img"><img src={image || '/images/memory-kraft-collection.png'} alt=""/></div>; }
 
-function ProductCard({ product, onView, onAdd, favourite, onFavourite, buttonLabel = 'Add to bag' }) { const discount=product.regularPrice>product.price?Math.round((1-product.price/product.regularPrice)*100):0; const secondImage = product.product_images?.map(image=>image.public_url).filter(Boolean).find(url=>url && url !== product.image); return <article className="catalog-card"><div className="catalog-image"><button className="catalog-image-link" onClick={() => onView(product)} aria-label={`View ${product.name}`}><img className="catalog-image-primary" src={product.image} alt={product.name} loading="eager" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src='/images/memory-kraft-collection.png';}}/>{secondImage&&<img className="catalog-image-secondary" src={secondImage} alt="" aria-hidden="true" loading="lazy"/>}</button>{product.badge&&<span className="catalog-badge">{product.badge}</span>}<button className={`catalog-favourite ${favourite?'is-favourite':''}`} onClick={()=>onFavourite(product.id)} aria-label={`${favourite?'Remove':'Save'} ${product.name}`} aria-pressed={favourite}>{favourite?'♥':'♡'}</button></div><div className="catalog-copy">{product.rating&&<p className="catalog-rating">{Number(product.rating).toFixed(1)} <span>★</span>{product.review_count?` · ${product.review_count}`:''}</p>}<p className="catalog-category">{product.categories?.[0]||'Personalized gift'}</p><h3>{product.name}</h3><p className="catalog-description">{product.type}</p><div className="catalog-price"><strong>{rupee(product.price)}</strong>{product.regularPrice>product.price&&<s>{rupee(product.regularPrice)}</s>}{discount>0&&<small>{discount}% off</small>}</div><button className="catalog-add" onClick={() => onAdd(product)}>{buttonLabel} <Icon name="plus" size={15}/></button></div></article> }
+function ProductCard({ product, onView, onAdd, favourite, onFavourite, buttonLabel = 'Add to bag' }) { const discount=product.regularPrice>product.price?Math.round((1-product.price/product.regularPrice)*100):0; const secondImage = product.gallery?.find(url=>url && url !== product.image); return <article className="catalog-card"><div className="catalog-image"><button className="catalog-image-link" onClick={() => onView(product)} aria-label={`View ${product.name}`}><img className="catalog-image-primary" src={product.image} alt={product.name} loading="eager" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src='/images/memory-kraft-collection.png';}}/>{secondImage&&<img className="catalog-image-secondary" src={secondImage} alt="" aria-hidden="true" loading="lazy"/>}</button>{product.badge&&<span className="catalog-badge">{product.badge}</span>}<button className={`catalog-favourite ${favourite?'is-favourite':''}`} onClick={()=>onFavourite(product.id)} aria-label={`${favourite?'Remove':'Save'} ${product.name}`} aria-pressed={favourite}>{favourite?'♥':'♡'}</button></div><div className="catalog-copy">{product.rating&&<p className="catalog-rating">{Number(product.rating).toFixed(1)} <span>★</span>{product.review_count?` · ${product.review_count}`:''}</p>}<p className="catalog-category">{product.categories?.[0]||'Personalized gift'}</p><h3>{product.name}</h3><p className="catalog-description">{product.type}</p><div className="catalog-price"><strong>{rupee(product.price)}</strong>{product.regularPrice>product.price&&<s>{rupee(product.regularPrice)}</s>}{discount>0&&<small>{discount}% off</small>}</div><button className="catalog-add" onClick={() => onAdd(product)}>{buttonLabel} <Icon name="plus" size={15}/></button></div></article> }
 
 function GiftScene() { return <figure className="gift-scene" aria-label="An open handmade memory gift box surrounded by personal photographs, a ribbon and a handwritten note"><div className="gift-main"><img src="/images/memory-kraft-hero.png" alt="Open handmade memory box with printed photographs, ribbon and flowers"/></div><PolaroidPhoto className="polaroid polaroid-one" image="/images/memory-kraft-hero.png" caption="the little things" rotation="-13deg" size="md" depth={4}/><PolaroidPhoto className="polaroid polaroid-two" image="/images/memory-kraft-collection.png" caption="forever, here" rotation="11deg" size="lg" depth={4}/><PolaroidPhoto className="polaroid polaroid-three" image="/images/memory-kraft-hero.png" caption="just us" rotation="9deg" size="sm" depth={3}/><PolaroidPhoto className="polaroid polaroid-four" image="/images/memory-kraft-collection.png" rotation="-9deg" size="sm" depth={2}/><PaperNote className="hero-note" rotation="-5deg">a small box<br/>of <i>everything</i><b>♡</b></PaperNote><div className="hero-ribbon"/><GiftTag className="hero-tag" rotation="15deg">for<br/>you</GiftTag><TapeSticker className="hero-tape"/></figure> }
 
@@ -119,6 +154,106 @@ function useDragScroll(selector) {
 }
 function CatalogSkeleton({ count = 8 }) { return <div className="catalog-skeleton" aria-hidden="true">{Array.from({ length: count }).map((_, index) => <div className="sk-card" key={index}><div className="sk-image"/><div className="sk-line"/><div className="sk-line short"/></div>)}</div>; }
 
+function useScrollScenes() {
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || typeof IntersectionObserver !== 'function') return;
+
+    const root = document.documentElement;
+    const observedScenes = new Set();
+    const fallbackTimers = new Map();
+    let observer;
+    let mutationObserver;
+    let scrollFrame = null;
+
+    const revealScene = scene => {
+      const fallbackTimer = fallbackTimers.get(scene);
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      fallbackTimers.delete(scene);
+      scene.classList.remove('is-scroll-pending');
+      scene.classList.add('is-visible');
+      observer?.unobserve(scene);
+    };
+
+    const revealVisibleScenes = () => {
+      scrollFrame = null;
+      observedScenes.forEach(scene => {
+        if (!scene.classList.contains('is-scroll-pending')) return;
+        const bounds = scene.getBoundingClientRect();
+        if (bounds.top <= window.innerHeight * 0.95 && bounds.bottom >= 0) revealScene(scene);
+      });
+    };
+
+    const queueVisibilityCheck = () => {
+      if (!scrollFrame) scrollFrame = window.requestAnimationFrame(revealVisibleScenes);
+    };
+
+    const observeScene = scene => {
+      if (!(scene instanceof Element) || observedScenes.has(scene)) return;
+      observedScenes.add(scene);
+
+      const bounds = scene.getBoundingClientRect();
+      if (bounds.top <= window.innerHeight * 0.95 && bounds.bottom >= 0) {
+        scene.classList.add('is-visible');
+        return;
+      }
+
+      scene.classList.add('is-scroll-pending');
+      try {
+        observer.observe(scene);
+        fallbackTimers.set(scene, window.setTimeout(() => revealScene(scene), 1500));
+      } catch (error) {
+        revealScene(scene);
+      }
+    };
+
+    try {
+      observer = new IntersectionObserver(entries => entries.forEach(entry => {
+        const fallbackTimer = fallbackTimers.get(entry.target);
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        fallbackTimers.delete(entry.target);
+        if (entry.isIntersecting) revealScene(entry.target);
+      }), { threshold: .16, rootMargin: '0px 0px -8% 0px' });
+
+      document.querySelectorAll('[data-scroll-scene]').forEach(observeScene);
+      root.classList.add('motion-safe', 'scroll-scenes-ready');
+
+      mutationObserver = new MutationObserver(records => records.forEach(record => {
+        if (record.type === 'attributes') {
+          observeScene(record.target);
+          return;
+        }
+        record.addedNodes.forEach(node => {
+          if (!(node instanceof Element)) return;
+          if (node.matches('[data-scroll-scene]')) observeScene(node);
+          node.querySelectorAll('[data-scroll-scene]').forEach(observeScene);
+        });
+      }));
+      mutationObserver.observe(document.getElementById('root'), { attributes: true, attributeFilter: ['data-scroll-scene'], childList: true, subtree: true });
+      window.addEventListener('scroll', queueVisibilityCheck, { passive: true });
+      window.addEventListener('resize', queueVisibilityCheck, { passive: true });
+      window.addEventListener('pageshow', queueVisibilityCheck);
+      document.addEventListener('visibilitychange', queueVisibilityCheck);
+      queueVisibilityCheck();
+    } catch (error) {
+      observedScenes.forEach(revealScene);
+      root.classList.remove('motion-safe', 'scroll-scenes-ready');
+    }
+
+    return () => {
+      observer?.disconnect();
+      mutationObserver?.disconnect();
+      fallbackTimers.forEach(timer => window.clearTimeout(timer));
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      window.removeEventListener('scroll', queueVisibilityCheck);
+      window.removeEventListener('resize', queueVisibilityCheck);
+      window.removeEventListener('pageshow', queueVisibilityCheck);
+      document.removeEventListener('visibilitychange', queueVisibilityCheck);
+      observedScenes.forEach(revealScene);
+      root.classList.remove('motion-safe', 'scroll-scenes-ready');
+    };
+  }, []);
+}
+
 function App() {
   const [catalogProducts, setCatalogProducts] = useState([]); const [catalogState,setCatalogState]=useState({loading:true,error:false}); const [favourites,setFavourites]=useState([]); const [cart, setCart] = useState([]); const [selected, setSelected] = useState(null); const [drawer, setDrawer] = useState(false); const [checkout, setCheckout] = useState(false); const [filter, setFilter] = useState('All'); const [selectedOccasion, setSelectedOccasion] = useState(null); const [cartNotice,setCartNotice]=useState(null); const [mobileSearch,setMobileSearch]=useState(''); const [mobileMenuOpen,setMobileMenuOpen]=useState(false); const [wishlistOnly,setWishlistOnly]=useState(false); const [bagBump,setBagBump]=useState(false); const scrolled = useScrolled(); useDragScroll('.occasion-rail, .supporting-gifts, .story-line');
   const count = cart.reduce((n, p) => n + p.quantity, 0); const total = cart.reduce((n, p) => n + p.price * p.quantity, 0);
@@ -132,7 +267,7 @@ function App() {
       return matchesPerson && matchesOccasion && matchesWishlist && (!searchTerm || searchable.includes(searchTerm));
     });
   }, [filter, catalogProducts, favourites, mobileSearch, selectedOccasion, wishlistOnly]);
-  const loadCatalog=async()=>{setCatalogState({loading:true,error:false});try{const items=await getProducts();setCatalogProducts(items.map(toStorefrontProduct));setCatalogState({loading:false,error:false});}catch(error){setCatalogProducts([]);setCatalogState({loading:false,error:true});}};
+  const loadCatalog=async()=>{setCatalogState({loading:true,error:false});try{const items=await getProducts();console.log('[catalog-debug] raw products', items);setCatalogProducts(items.map(toStorefrontProduct));setCatalogState({loading:false,error:false});}catch(error){console.error('[catalog-debug] getProducts() failed', error);setCatalogProducts([]);setCatalogState({loading:false,error:true});}};
   useEffect(() => { loadCatalog(); }, []);
   useEffect(() => {
     const refreshWhenReturning = () => { if (document.visibilityState === 'visible') loadCatalog(); };
@@ -165,7 +300,7 @@ function App() {
     heroEl.addEventListener('mouseleave', onLeave);
     return () => { heroEl.removeEventListener('mousemove', onMove); heroEl.removeEventListener('mouseleave', onLeave); if (raf) cancelAnimationFrame(raf); };
   }, []);
-  useEffect(() => { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; document.documentElement.classList.add('motion-safe'); const scenes = document.querySelectorAll('[data-scroll-scene]'); const observer = new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); } }), { threshold: .16, rootMargin: '0px 0px -8% 0px' }); scenes.forEach(scene => observer.observe(scene)); return () => { observer.disconnect(); document.documentElement.classList.remove('motion-safe'); }; }, []);
+  useScrollScenes();
   useEffect(() => { const openAdminLogin = event => { if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'o') { event.preventDefault(); location.assign('/admin/login'); } }; window.addEventListener('keydown', openAdminLogin); return () => window.removeEventListener('keydown', openAdminLogin); }, []);
   const selectOccasion = occasion => { setSelectedOccasion(occasion); window.setTimeout(goProducts, 220); };
   if (location.pathname === '/categories') return <><CategoryPage products={catalogProducts} catalogState={catalogState} retry={loadCatalog} count={count} favourites={favourites} onFavourite={id=>setFavourites(items=>items.includes(id)?items.filter(item=>item!==id):[...items,id])} onView={setSelected} onAdd={add} onCart={()=>setDrawer(true)}/>{cartNotice&&<div className="cart-toast" role="status"><span>✓</span><div><strong>{cartNotice.alreadyInCart?'Already in your cart':'Added to cart'}</strong><small>{cartNotice.name}</small></div><button onClick={()=>{setCartNotice(null);setDrawer(true)}}>View cart</button></div>}{selected && <ProductModal product={selected} close={() => setSelected(null)} add={customization => { add(selected, customization); setSelected(null); }}/>} {drawer && <CartDrawer cart={cart} total={total} close={() => setDrawer(false)} checkout={()=>{setDrawer(false);setCheckout(true)}} remove={remove} changeQuantity={changeQuantity}/>} {checkout && <Checkout cart={cart} close={()=>setCheckout(false)} complete={()=>{setCart([]);setCheckout(false)}}/>}</>;
@@ -187,7 +322,7 @@ function App() {
   {selected && <ProductModal product={selected} close={() => setSelected(null)} add={customization => { add(selected, customization); setSelected(null); }}/>} {drawer && <CartDrawer cart={cart} total={total} close={() => setDrawer(false)} checkout={()=>{setDrawer(false);setCheckout(true)}} remove={remove} changeQuantity={changeQuantity}/>} {checkout && <Checkout cart={cart} close={()=>setCheckout(false)} complete={()=>{setCart([]);setCheckout(false)}}/>}</>;
 }
 
-function ProductModal({product, close, add}) { const [files, setFiles] = useState([]); const [note, setNote] = useState(''); const [galleryIndex, setGalleryIndex] = useState(0); const gallery = product.product_images?.map(image=>image.public_url).filter(Boolean) || [product.image]; const previews = useMemo(() => files.map(file => ({name:file.name, url:URL.createObjectURL(file)})), [files]); useEffect(() => () => previews.forEach(preview => URL.revokeObjectURL(preview.url)), [previews]); const selectFiles = event => setFiles(Array.from(event.target.files || [])); return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/><span>{product.badge}</span></div><div className="product-gallery-thumbs">{gallery.map((image,index) => <button key={image} className={galleryIndex === index ? 'is-active' : ''} onClick={() => setGalleryIndex(index)} aria-label={`Show product photo ${index + 1}`}><img src={image} alt=""/></button>)}</div><PhotoStack className="product-photo-stack" label="Product detail photographs" photos={[{image:gallery[0],caption:'made to keep',rotation:'-7deg'},{image:gallery[0],rotation:'6deg'}]}/></div><div className="product-details"><p className="eyebrow">Personalized gift</p><h2>{product.name}</h2><strong className="modal-price">{rupee(product.price)}</strong><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="personalization-panel"><div className="personalization-heading"><div><p className="eyebrow">The personal part</p><h3>Add your memories</h3></div><span>Optional</span></div><p>Choose photos from this device to preview how your memories can become part of the gift.</p><label className="upload upload-zone"><input type="file" accept="image/*" multiple onChange={selectFiles}/><Icon name="plus"/><span><b>Choose photos</b><small>Local preview only — not uploaded until a delivery flow is connected.</small></span></label>{previews.length > 0 && <div className="upload-previews" aria-live="polite">{previews.map((preview,index) => <PolaroidPhoto key={preview.url} image={preview.url} alt={`Selected photo ${index + 1}`} caption={index === 0 ? 'your memory' : undefined} size="sm" rotation={`${index % 2 ? 4 : -4}deg`}/>)}</div>}<div className="preview-placement">{previews[0] ? <><img src={previews[0].url} alt="Selected photo preview inside gift"/><span>your photo, printed</span></> : <><img src={gallery[0]} alt="Example photo placement in a gift"/><span>your photo will appear here</span></>}</div><label className="text-field">A note for them <input value={note} onChange={event => setNote(event.target.value)} placeholder="Write something from the heart"/></label></div><button className="primary full" onClick={() => add({photoCount:files.length, note:note.trim()})}>Add to cart · {rupee(product.price)}</button><p className="delivery">Delivery availability and timing are confirmed at checkout.</p></div></div></div> }
+function ProductModal({product, close, add}) { const [files, setFiles] = useState([]); const [note, setNote] = useState(''); const [galleryIndex, setGalleryIndex] = useState(0); const gallery = product.gallery?.length ? product.gallery : [product.image]; const previews = useMemo(() => files.map(file => ({name:file.name, url:URL.createObjectURL(file)})), [files]); useEffect(() => () => previews.forEach(preview => URL.revokeObjectURL(preview.url)), [previews]); const selectFiles = event => setFiles(Array.from(event.target.files || [])); return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/><span>{product.badge}</span></div><div className="product-gallery-thumbs">{gallery.map((image,index) => <button key={image} className={galleryIndex === index ? 'is-active' : ''} onClick={() => setGalleryIndex(index)} aria-label={`Show product photo ${index + 1}`}><img src={image} alt=""/></button>)}</div><PhotoStack className="product-photo-stack" label="Product detail photographs" photos={[{image:gallery[0],caption:'made to keep',rotation:'-7deg'},{image:gallery[0],rotation:'6deg'}]}/></div><div className="product-details"><p className="eyebrow">Personalized gift</p><h2>{product.name}</h2><strong className="modal-price">{rupee(product.price)}</strong><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="personalization-panel"><div className="personalization-heading"><div><p className="eyebrow">The personal part</p><h3>Add your memories</h3></div><span>Optional</span></div><p>Choose photos from this device to preview how your memories can become part of the gift.</p><label className="upload upload-zone"><input type="file" accept="image/*" multiple onChange={selectFiles}/><Icon name="plus"/><span><b>Choose photos</b><small>Local preview only — not uploaded until a delivery flow is connected.</small></span></label>{previews.length > 0 && <div className="upload-previews" aria-live="polite">{previews.map((preview,index) => <PolaroidPhoto key={preview.url} image={preview.url} alt={`Selected photo ${index + 1}`} caption={index === 0 ? 'your memory' : undefined} size="sm" rotation={`${index % 2 ? 4 : -4}deg`}/>)}</div>}<div className="preview-placement">{previews[0] ? <><img src={previews[0].url} alt="Selected photo preview inside gift"/><span>your photo, printed</span></> : <><img src={gallery[0]} alt="Example photo placement in a gift"/><span>your photo will appear here</span></>}</div><label className="text-field">A note for them <input value={note} onChange={event => setNote(event.target.value)} placeholder="Write something from the heart"/></label></div><button className="primary full" onClick={() => add({photoCount:files.length, note:note.trim()})}>Add to cart · {rupee(product.price)}</button><p className="delivery">Delivery availability and timing are confirmed at checkout.</p></div></div></div> }
 function CartDrawer({cart, total, close, checkout, remove, changeQuantity}) { return <div className="overlay cart-overlay" role="dialog" aria-modal="true" aria-label="Cart"><aside className="cart-drawer"><div className="cart-head"><div><p className="eyebrow">Ready when you are</p><h2>Your gift bag</h2></div><button onClick={close} aria-label="Close cart"><Icon name="close"/></button></div>{cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><ProductArt kind={item.art} image={item.image}/><div className="cart-item-copy"><h3>{item.name}</h3><p>{item.type}</p>{item.customization && <small>{item.customization.photoCount ? `${item.customization.photoCount} personal photo${item.customization.photoCount > 1 ? 's' : ''}` : 'No photos selected'}{item.customization.note ? ' · personal note added' : ''}</small>}<div className="cart-line-bottom"><div className="quantity-control" aria-label={`Quantity for ${item.name}`}><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Decrease quantity of ${item.name}`}>−</button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Increase quantity of ${item.name}`}>+</button></div><strong>{rupee(item.price * item.quantity)}</strong></div></div><button className="remove-item" onClick={() => remove(item.id)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><strong>{rupee(total)}</strong></p><small>Demo checkout — no payment will be collected.</small><button className="primary full" onClick={checkout}>Checkout <Icon name="arrow"/></button></div></> : <div className="empty-cart"><span>♡</span><h3>Your bag is waiting for a memory.</h3><button className="primary" onClick={close}>Explore gifts</button></div>}</aside></div> }
 
 function Checkout({cart, close, complete}) { const [form,setForm]=useState({name:'',phone:'',address:'',city:'',state:'',postal_code:''}); const [busy,setBusy]=useState(false),[error,setError]=useState(''),[order,setOrder]=useState(null); const set=(key,value)=>setForm(current=>({...current,[key]:value})); const place=async event=>{event.preventDefault();setError('');if(Object.values(form).some(value=>!value.trim())){setError('Please complete your name, phone, address, city, state, and postal code.');return;}if(!/^[0-9]{6}$/.test(form.postal_code.trim())){setError('Enter a valid 6-digit postal code.');return;}setBusy(true);try{const created=await createOrder({shipping:{...form,country:'India'},items:cart.map(item=>({product_id:item.id,quantity:item.quantity,customization_text:item.customization?.note||null}))});setOrder(created);}catch(err){setError('Your demo order could not be placed. Please check your details and try again.');}finally{setBusy(false)}};if(order)return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="product-modal"><div className="product-details"><p className="eyebrow">Demo order confirmed</p><h2>Order placed successfully.</h2><p className="product-description">Your order ID is <b>{order.order_number}</b>. It is now visible in Admin → Orders.</p><button className="primary full" onClick={complete}>Continue shopping</button></div></div></div>;return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="product-modal"><div className="product-details"><p className="eyebrow">Demo checkout</p><h2>Your delivery details</h2><form className="personalization-panel" onSubmit={place}><label className="text-field">Name<input required value={form.name} onChange={e=>set('name',e.target.value)}/></label><label className="text-field">Phone<input required value={form.phone} onChange={e=>set('phone',e.target.value)}/></label><label className="text-field">Address<input required value={form.address} onChange={e=>set('address',e.target.value)}/></label><label className="text-field">City<input required value={form.city} onChange={e=>set('city',e.target.value)}/></label><label className="text-field">State<input required value={form.state} onChange={e=>set('state',e.target.value)}/></label><label className="text-field">Postal code<input required inputMode="numeric" pattern="[0-9]{6}" value={form.postal_code} onChange={e=>set('postal_code',e.target.value)}/></label>{error&&<p className="form-error">{error}</p>}<button className="primary full" disabled={busy}>{busy?'Placing order…':'Place demo order'}</button><button type="button" className="text-link" onClick={close}>Back to cart</button></form></div></div></div> }

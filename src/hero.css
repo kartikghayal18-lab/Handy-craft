@@ -30,11 +30,11 @@
 .hero-copy .lede{animation-delay:1.2s}
 .hero-copy .hero-actions{animation-delay:1.27s}
 .hero-copy .shipping{animation-delay:1.33s}
-@keyframes heroGift{from{opacity:0;transform:translateY(22px) scale(.96)}to{opacity:1;transform:none}}
-@keyframes heroPhoto{from{opacity:0;transform:translateY(22px) rotate(0) scale(.86)}to{opacity:1}}
-@keyframes heroNote{from{opacity:0;transform:translateY(-12px) rotate(0) scale(.86)}to{opacity:1}}
+@keyframes heroGift{from{transform:translateY(22px) scale(.96)}to{transform:none}}
+@keyframes heroPhoto{from{transform:translateY(22px) rotate(0) scale(.86)}}
+@keyframes heroNote{from{transform:translateY(-12px) rotate(0) scale(.86)}}
 @keyframes heroRibbon{0%{opacity:0;transform:rotate(-12deg) scaleX(.7)}70%{opacity:.85;transform:rotate(-12deg) scaleX(1.04)}100%{opacity:.85;transform:rotate(-12deg) scaleX(1)}}
-@keyframes heroCopy{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes heroCopy{from{transform:translateY(14px)}to{transform:none}}
 
 @media(max-width:768px){
   .hero{min-height:0;padding:24px 20px 23px;display:flex;flex-direction:column;gap:5px}
