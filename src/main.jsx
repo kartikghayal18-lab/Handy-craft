@@ -12,6 +12,7 @@ import './product-experience.css';
 import './categories.css';
 import './qa.css';
 import './mobile-storefront.css';
+import CoverFlowCarousel from './components/CoverFlowCarousel';
 import { getProducts } from './lib/supabase/products';
 import { createOrder } from './lib/supabase/orders';
 import { requireSupabase, supabase } from './lib/supabase/client';
@@ -257,6 +258,7 @@ function useScrollScenes() {
 function App() {
   const [catalogProducts, setCatalogProducts] = useState([]); const [catalogState,setCatalogState]=useState({loading:true,error:false}); const [favourites,setFavourites]=useState([]); const [cart, setCart] = useState([]); const [selected, setSelected] = useState(null); const [drawer, setDrawer] = useState(false); const [checkout, setCheckout] = useState(false); const [filter, setFilter] = useState('All'); const [selectedOccasion, setSelectedOccasion] = useState(null); const [cartNotice,setCartNotice]=useState(null); const [mobileSearch,setMobileSearch]=useState(''); const [mobileMenuOpen,setMobileMenuOpen]=useState(false); const [wishlistOnly,setWishlistOnly]=useState(false); const [bagBump,setBagBump]=useState(false); const scrolled = useScrolled(); useDragScroll('.occasion-rail, .supporting-gifts, .story-line');
   const count = cart.reduce((n, p) => n + p.quantity, 0); const total = cart.reduce((n, p) => n + p.price * p.quantity, 0);
+  const carouselItems = useMemo(() => catalogProducts.filter(product => product.image).slice(0, 5).map(product => ({ productId: product.id, tag: product.personalizable ? '#Personalized' : '#Bestseller', titleLine1: product.name, titleLine2: product.categories?.[0] ? `– ${product.categories[0]}` : '– MEMORY KRAFT', desc: product.short_description || product.type || 'A personalized keepsake made from your favourite memories.', img: product.image, price: rupee(product.price), ctaText: product.personalizable ? 'Personalize' : 'View Gift' })), [catalogProducts]);
   const visible = useMemo(() => {
     const searchTerm = mobileSearch.trim().toLowerCase();
     return catalogProducts.filter(product => {
@@ -310,6 +312,18 @@ function App() {
   <main id="top"><section className="mobile-hero"><img src="/images/memory-kraft-hero.png" alt="Handmade Memory Kraft personalized gift"/><div><p className="eyebrow">Personalized gifting</p><h1>Made from the moments you <i>love.</i></h1><p>Handmade keepsakes for the people who mean everything.</p><button className="primary" onClick={goProducts}>Shop now <Icon name="arrow"/></button></div></section><section className="hero"><div className="hero-copy"><p className="eyebrow">Personalized gifting, made tenderly</p><h1>Make your memories <i>worth keeping.</i></h1><p className="lede">Personalized gifts made from your favourite moments, for the people who mean everything.</p><div className="hero-actions"><button className="primary" onClick={goProducts}>Create a gift <Icon name="arrow"/></button><button className="text-link" onClick={goProducts}>Explore gifts</button></div><p className="shipping">Handmade with care · Ships across India</p></div><GiftScene/></section>
   <TrustStrip/>
   <section className="occasions section" id="occasions" data-scroll-scene><div className="section-head scene-piece"><p className="eyebrow">Gift by feeling</p><h2>Who are you gifting for?</h2></div><div className={`occasion-rail ${selectedOccasion ? 'has-selection' : ''}`}>{mobileCategoryItems.map((category,index) => <OccasionScene key={category} name={category} index={index} selected={selectedOccasion === category} onClick={() => selectOccasion(category)}/>)}</div></section>
+  {!catalogState.loading && carouselItems.length >= 2 && (
+    <CoverFlowCarousel
+      items={carouselItems}
+      sectionLabel="Featured gifts"
+      autoplay
+      autoplayDelay={4500}
+      onCtaClick={item => {
+        const product = catalogProducts.find(product => String(product.id) === String(item.productId));
+        if (product) setSelected(product);
+      }}
+    />
+  )}
   <BestSellerGallery products={mobileSearch || wishlistOnly || selectedOccasion ? visible : catalogProducts} onView={setSelected} onAdd={add} favourites={favourites} onFavourite={id=>setFavourites(items=>items.includes(id)?items.filter(item=>item!==id):[...items,id])} occasion={selectedOccasion} searchActive={Boolean(mobileSearch || wishlistOnly || selectedOccasion)} {...catalogState} retry={loadCatalog}/>
   <section className="how-story memory-story section" id="story" data-scroll-scene><div className="section-head scene-piece"><p className="eyebrow">A little ritual</p><h2>Little moments. Big memories.</h2></div><div className="story-line"><article className="scene-piece"><span>01</span><PolaroidPhoto image="/images/memory-kraft-collection.png" alt="Handmade gift collection" caption="pick a feeling" rotation="-5deg" tape/><h3>Choose your gift</h3><p>Find a piece that feels like them.</p></article><article className="scene-piece"><span>02</span><PaperNote tone="blush" rotation="3deg">your favourite<br/><i>moments</i></PaperNote><h3>Add your memories</h3><p>Share the photos and words that matter.</p></article><article className="scene-piece"><span>03</span><EditorialImageBlock image="/images/memory-kraft-hero.png" alt="Finished personalized memory box" title="made by hand"/><h3>We make it beautiful</h3><p>Carefully packed and ready to hold.</p></article></div></section>
   <section className="photo-to-gift section" data-scroll-scene><div className="photo-gift-copy scene-piece"><p className="eyebrow">Made just once</p><h2>From camera roll to keepsake.</h2><p>Favourite moments become a gift they can hold on to.</p><button className="primary" disabled={!catalogProducts[0]} onClick={() => setSelected(catalogProducts[0])}>Start personalizing <Icon name="arrow"/></button></div><div className="gift-journey"><div className="journey-phone scene-piece"><span>♡</span><small>your photo</small></div><span className="journey-arrow">→</span><PolaroidPhoto className="scene-piece" image="/images/memory-kraft-hero.png" alt="Printed memory photo" caption="printed" rotation="-7deg" size="sm"/><span className="journey-arrow">→</span><div className="journey-box scene-piece"><img src="/images/memory-kraft-collection.png" alt="Personalized finished gift"/><span>keepsake</span></div></div></section>
