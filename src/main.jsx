@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AdminApp from './admin/AdminApp';
 import './styles.css';
@@ -14,7 +14,7 @@ import './qa.css';
 import './mobile-storefront.css';
 import CoverFlowCarousel from './components/CoverFlowCarousel';
 import { getProducts } from './lib/supabase/products';
-import { createOrder } from './lib/supabase/orders';
+import { createPaymentOrder, loadRazorpayCheckout, verifyPayment } from './lib/razorpay';
 import { requireSupabase, supabase } from './lib/supabase/client';
 
 const categories = ['Birthday', 'Anniversary', 'Love', 'Friendship', 'Raksha Bandhan', 'Best Friend', 'Just Because', 'Custom'];
@@ -337,8 +337,76 @@ function App() {
 }
 
 function ProductModal({product, close, add}) { const [files, setFiles] = useState([]); const [note, setNote] = useState(''); const [galleryIndex, setGalleryIndex] = useState(0); const gallery = product.gallery?.length ? product.gallery : [product.image]; const previews = useMemo(() => files.map(file => ({name:file.name, url:URL.createObjectURL(file)})), [files]); useEffect(() => () => previews.forEach(preview => URL.revokeObjectURL(preview.url)), [previews]); const selectFiles = event => setFiles(Array.from(event.target.files || [])); return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/><span>{product.badge}</span></div><div className="product-gallery-thumbs">{gallery.map((image,index) => <button key={image} className={galleryIndex === index ? 'is-active' : ''} onClick={() => setGalleryIndex(index)} aria-label={`Show product photo ${index + 1}`}><img src={image} alt=""/></button>)}</div><PhotoStack className="product-photo-stack" label="Product detail photographs" photos={[{image:gallery[0],caption:'made to keep',rotation:'-7deg'},{image:gallery[0],rotation:'6deg'}]}/></div><div className="product-details"><p className="eyebrow">Personalized gift</p><h2>{product.name}</h2><strong className="modal-price">{rupee(product.price)}</strong><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="personalization-panel"><div className="personalization-heading"><div><p className="eyebrow">The personal part</p><h3>Add your memories</h3></div><span>Optional</span></div><p>Choose photos from this device to preview how your memories can become part of the gift.</p><label className="upload upload-zone"><input type="file" accept="image/*" multiple onChange={selectFiles}/><Icon name="plus"/><span><b>Choose photos</b><small>Local preview only — not uploaded until a delivery flow is connected.</small></span></label>{previews.length > 0 && <div className="upload-previews" aria-live="polite">{previews.map((preview,index) => <PolaroidPhoto key={preview.url} image={preview.url} alt={`Selected photo ${index + 1}`} caption={index === 0 ? 'your memory' : undefined} size="sm" rotation={`${index % 2 ? 4 : -4}deg`}/>)}</div>}<div className="preview-placement">{previews[0] ? <><img src={previews[0].url} alt="Selected photo preview inside gift"/><span>your photo, printed</span></> : <><img src={gallery[0]} alt="Example photo placement in a gift"/><span>your photo will appear here</span></>}</div><label className="text-field">A note for them <input value={note} onChange={event => setNote(event.target.value)} placeholder="Write something from the heart"/></label></div><button className="primary full" onClick={() => add({photoCount:files.length, note:note.trim()})}>Add to cart · {rupee(product.price)}</button><p className="delivery">Delivery availability and timing are confirmed at checkout.</p></div></div></div> }
-function CartDrawer({cart, total, close, checkout, remove, changeQuantity}) { return <div className="overlay cart-overlay" role="dialog" aria-modal="true" aria-label="Cart"><aside className="cart-drawer"><div className="cart-head"><div><p className="eyebrow">Ready when you are</p><h2>Your gift bag</h2></div><button onClick={close} aria-label="Close cart"><Icon name="close"/></button></div>{cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><ProductArt kind={item.art} image={item.image}/><div className="cart-item-copy"><h3>{item.name}</h3><p>{item.type}</p>{item.customization && <small>{item.customization.photoCount ? `${item.customization.photoCount} personal photo${item.customization.photoCount > 1 ? 's' : ''}` : 'No photos selected'}{item.customization.note ? ' · personal note added' : ''}</small>}<div className="cart-line-bottom"><div className="quantity-control" aria-label={`Quantity for ${item.name}`}><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Decrease quantity of ${item.name}`}>−</button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Increase quantity of ${item.name}`}>+</button></div><strong>{rupee(item.price * item.quantity)}</strong></div></div><button className="remove-item" onClick={() => remove(item.id)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><strong>{rupee(total)}</strong></p><small>Demo checkout — no payment will be collected.</small><button className="primary full" onClick={checkout}>Checkout <Icon name="arrow"/></button></div></> : <div className="empty-cart"><span>♡</span><h3>Your bag is waiting for a memory.</h3><button className="primary" onClick={close}>Explore gifts</button></div>}</aside></div> }
+function CartDrawer({cart, total, close, checkout, remove, changeQuantity}) { return <div className="overlay cart-overlay" role="dialog" aria-modal="true" aria-label="Cart"><aside className="cart-drawer"><div className="cart-head"><div><p className="eyebrow">Ready when you are</p><h2>Your gift bag</h2></div><button onClick={close} aria-label="Close cart"><Icon name="close"/></button></div>{cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><ProductArt kind={item.art} image={item.image}/><div className="cart-item-copy"><h3>{item.name}</h3><p>{item.type}</p>{item.customization && <small>{item.customization.photoCount ? `${item.customization.photoCount} personal photo${item.customization.photoCount > 1 ? 's' : ''}` : 'No photos selected'}{item.customization.note ? ' · personal note added' : ''}</small>}<div className="cart-line-bottom"><div className="quantity-control" aria-label={`Quantity for ${item.name}`}><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Decrease quantity of ${item.name}`}>−</button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Increase quantity of ${item.name}`}>+</button></div><strong>{rupee(item.price * item.quantity)}</strong></div></div><button className="remove-item" onClick={() => remove(item.id)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><strong>{rupee(total)}</strong></p><small>Secure checkout powered by Razorpay.</small><button className="primary full" onClick={checkout}>Checkout <Icon name="arrow"/></button></div></> : <div className="empty-cart"><span>♡</span><h3>Your bag is waiting for a memory.</h3><button className="primary" onClick={close}>Explore gifts</button></div>}</aside></div> }
 
-function Checkout({cart, close, complete}) { const [form,setForm]=useState({name:'',phone:'',address:'',city:'',state:'',postal_code:''}); const [busy,setBusy]=useState(false),[error,setError]=useState(''),[order,setOrder]=useState(null); const set=(key,value)=>setForm(current=>({...current,[key]:value})); const place=async event=>{event.preventDefault();setError('');if(Object.values(form).some(value=>!value.trim())){setError('Please complete your name, phone, address, city, state, and postal code.');return;}if(!/^[0-9]{6}$/.test(form.postal_code.trim())){setError('Enter a valid 6-digit postal code.');return;}setBusy(true);try{const created=await createOrder({shipping:{...form,country:'India'},items:cart.map(item=>({product_id:item.id,quantity:item.quantity,customization_text:item.customization?.note||null}))});setOrder(created);}catch(err){setError('Your demo order could not be placed. Please check your details and try again.');}finally{setBusy(false)}};if(order)return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="product-modal"><div className="product-details"><p className="eyebrow">Demo order confirmed</p><h2>Order placed successfully.</h2><p className="product-description">Your order ID is <b>{order.order_number}</b>. It is now visible in Admin → Orders.</p><button className="primary full" onClick={complete}>Continue shopping</button></div></div></div>;return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="product-modal"><div className="product-details"><p className="eyebrow">Demo checkout</p><h2>Your delivery details</h2><form className="personalization-panel" onSubmit={place}><label className="text-field">Name<input required value={form.name} onChange={e=>set('name',e.target.value)}/></label><label className="text-field">Phone<input required value={form.phone} onChange={e=>set('phone',e.target.value)}/></label><label className="text-field">Address<input required value={form.address} onChange={e=>set('address',e.target.value)}/></label><label className="text-field">City<input required value={form.city} onChange={e=>set('city',e.target.value)}/></label><label className="text-field">State<input required value={form.state} onChange={e=>set('state',e.target.value)}/></label><label className="text-field">Postal code<input required inputMode="numeric" pattern="[0-9]{6}" value={form.postal_code} onChange={e=>set('postal_code',e.target.value)}/></label>{error&&<p className="form-error">{error}</p>}<button className="primary full" disabled={busy}>{busy?'Placing order…':'Place demo order'}</button><button type="button" className="text-link" onClick={close}>Back to cart</button></form></div></div></div> }
+function Checkout({cart, close, complete}) {
+  const [form,setForm]=useState({name:'',phone:'',email:'',address:'',city:'',state:'',postal_code:''});
+  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[order,setOrder]=useState(null);
+  const paymentInProgress=useRef(false);
+  const pendingVerification=useRef(null);
+  const set=(key,value)=>setForm(current=>({...current,[key]:value}));
+  const verifyAndStore=async payload=>{
+    pendingVerification.current=payload;
+    const verified=await verifyPayment(payload);
+    if(!verified.verified||!verified.order)throw new Error('Payment could not be verified.');
+    pendingVerification.current=null;
+    setOrder(verified.order);
+  };
+  const place=async event=>{
+    event.preventDefault();
+    setError('');
+    const required=['name','phone','address','city','state','postal_code'];
+    if(required.some(key=>!form[key].trim())){setError('Please complete your name, phone, address, city, state, and postal code.');return;}
+    if(!/^[0-9]{6}$/.test(form.postal_code.trim())){setError('Enter a valid 6-digit postal code.');return;}
+    if(form.email.trim()&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())){setError('Enter a valid email address.');return;}
+    const razorpayKey=import.meta.env.VITE_RAZORPAY_KEY_ID?.trim();
+    if(!razorpayKey?.startsWith('rzp_test_')){setError('Secure test checkout is not configured.');return;}
+    if(paymentInProgress.current)return;
+    paymentInProgress.current=true;
+    setBusy(true);
+    if(pendingVerification.current){
+      try{await verifyAndStore(pendingVerification.current);}
+      catch(err){console.error('[checkout] verification retry failed',err);setError('Payment could not be verified. Please retry or contact support.');}
+      finally{paymentInProgress.current=false;setBusy(false);}
+      return;
+    }
+    try{
+      const shipping={...form,country:'India'};
+      const items=cart.map(item=>({product_id:item.id,quantity:item.quantity,customization_text:item.customization?.note||null}));
+      const [Razorpay,paymentOrder]=await Promise.all([loadRazorpayCheckout(),createPaymentOrder({shipping,items})]);
+      const checkout=new Razorpay({
+        key:razorpayKey,
+        order_id:paymentOrder.order_id,
+        amount:paymentOrder.amount,
+        currency:paymentOrder.currency,
+        name:'Memory Kraft',
+        description:'Secure checkout',
+        prefill:{name:form.name,contact:form.phone,email:form.email||undefined},
+        handler:async response=>{
+          setBusy(true);
+          setError('');
+          try{
+            await verifyAndStore({...response,checkout_token:paymentOrder.checkout_token});
+          }catch(err){
+            console.error('[checkout] verification failed',err);
+            setError('Payment could not be verified. Please retry payment or contact support.');
+          }finally{paymentInProgress.current=false;setBusy(false);}
+        },
+        modal:{ondismiss:()=>{paymentInProgress.current=false;setBusy(false);setError('Payment was cancelled. Your cart is safe — you can retry payment.');}},
+        theme:{color:'#9d4d54'},
+      });
+      checkout.on('payment.failed',()=>{paymentInProgress.current=false;setBusy(false);setError('Payment failed. Your cart is safe — you can retry payment.');});
+      checkout.open();
+    }catch(err){
+      console.error('[checkout] payment setup failed',err);
+      setError('Payment could not be prepared. Please try again.');
+      paymentInProgress.current=false;
+      setBusy(false);
+    }
+  };
+  if(order)return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="product-modal"><div className="product-details"><p className="eyebrow">Payment successful</p><h2>Order placed successfully.</h2><p className="product-description">Your order ID is <b>{order.order_number}</b>. It is now visible in Admin → Orders.</p><button className="primary full" onClick={complete}>Continue shopping</button></div></div></div>;
+  const payLabel=pendingVerification.current?'Retry payment verification':`Pay ${rupee(cart.reduce((sum,item)=>sum+item.price*item.quantity,0))} Securely`;
+  return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="product-modal"><div className="product-details"><p className="eyebrow">Secure checkout</p><h2>Your delivery details</h2><form className="personalization-panel" onSubmit={place}><label className="text-field">Name<input required autoComplete="name" value={form.name} onChange={e=>set('name',e.target.value)}/></label><label className="text-field">Phone<input required inputMode="tel" autoComplete="tel" value={form.phone} onChange={e=>set('phone',e.target.value)}/></label><label className="text-field">Email <small>(optional)</small><input type="email" autoComplete="email" value={form.email} onChange={e=>set('email',e.target.value)}/></label><label className="text-field">Address<input required autoComplete="street-address" value={form.address} onChange={e=>set('address',e.target.value)}/></label><label className="text-field">City<input required autoComplete="address-level2" value={form.city} onChange={e=>set('city',e.target.value)}/></label><label className="text-field">State<input required autoComplete="address-level1" value={form.state} onChange={e=>set('state',e.target.value)}/></label><label className="text-field">Postal code<input required inputMode="numeric" autoComplete="postal-code" pattern="[0-9]{6}" value={form.postal_code} onChange={e=>set('postal_code',e.target.value)}/></label>{error&&<p className="form-error" role="alert">{error}</p>}<button className="primary full" disabled={busy}>{busy?'Preparing secure payment…':payLabel}</button><button type="button" className="text-link" disabled={busy} onClick={close}>Back to cart</button></form></div></div></div>;
+}
 
 createRoot(document.getElementById('root')).render(location.pathname.startsWith('/admin') ? <AdminApp/> : <App/>);
