@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Forever Handy carriage mark</title>
+  <g fill="none" stroke="#251f19" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path fill="#f6e898" d="M21 18l4-7 5 5 4-10 5 10 5-5 3 7-5 4H25z"/>
+    <path fill="#e7c1dc" d="M18 23h32l-5 21H23z"/>
+    <path d="M34 23v21M22 33h24M18 24l-4 18M50 24l5 18"/>
+    <path d="M14 42h42M11 42c-3-4-5-1-4 2M56 42c3-4 5-1 4 2"/>
+    <circle cx="17" cy="49" r="7"/><circle cx="50" cy="49" r="9"/>
+    <path d="M17 42v14M10 49h14M12 44l10 10M22 44 12 54M50 40v18M41 49h18M44 43l12 12M56 43 44 55"/>
+    <path d="M27 23c2 4 5 4 7 0 2 4 5 4 7 0"/>
+  </g>
+</svg>

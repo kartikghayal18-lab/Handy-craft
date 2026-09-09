@@ -18,7 +18,8 @@
   .mobile-header-bar{height:60px;display:grid;grid-template-columns:44px minmax(0,1fr) 88px;align-items:center;padding:0 12px}
   .mobile-header-bar>button,.mobile-header-bar>div>button{width:44px;height:44px;display:grid;place-items:center;border-radius:50%;transition:background .25s}
   .mobile-header-bar>button:active,.mobile-header-bar>div>button:active{background:var(--paper)}
-  .mobile-header-bar .brand{justify-self:center;font-size:22px;white-space:nowrap}
+  .mobile-header-bar .brand{justify-self:center;font-size:17px;gap:4px;white-space:nowrap}
+  .mobile-header-bar .brand img{width:30px;height:30px}
   .mobile-header-bar>div{display:flex;justify-content:flex-end}.mobile-header-bar .bag span{right:2px;top:1px}
   .mobile-search{height:62px;display:flex;align-items:center;gap:9px;margin:0 14px;padding:0 13px;border:1px solid var(--line-strong);border-radius:12px;background:#fffdfa;transition:box-shadow .25s var(--ease)}
   .mobile-search:focus-within{box-shadow:0 0 0 3px var(--blush)}
@@ -68,6 +69,6 @@
 }
 
 @media (max-width:340px){
-  .mobile-header-bar{grid-template-columns:40px minmax(0,1fr) 80px;padding:0 8px}.mobile-header-bar>button,.mobile-header-bar>div>button{width:40px;height:40px}.mobile-header-bar .brand{font-size:20px}
+  .mobile-header-bar{grid-template-columns:40px minmax(0,1fr) 80px;padding:0 8px}.mobile-header-bar>button,.mobile-header-bar>div>button{width:40px;height:40px}.mobile-header-bar .brand{font-size:15px;gap:3px}.mobile-header-bar .brand img{width:28px;height:28px}
   .mobile-search{margin-inline:10px}.mobile-category-nav{padding-inline:10px}.mobile-hero{padding-inline:12px}.mobile-hero h1{font-size:33px}
 }

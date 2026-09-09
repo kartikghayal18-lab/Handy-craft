@@ -54,8 +54,9 @@ a{color:inherit;text-decoration:none}
 /* topbar */
 .topbar{height:78px;padding:0 clamp(20px,5vw,72px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(251,247,241,.86);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);z-index:40;transition:height .35s var(--ease),box-shadow .35s var(--ease)}
 .topbar.is-scrolled{height:64px;box-shadow:0 8px 24px rgba(37,26,18,.06)}
-.brand{font-family:'DM Serif Display';font-size:24px;letter-spacing:-.6px;display:inline-flex;align-items:baseline;gap:2px}
-.brand em{font-style:italic;color:var(--rose)}
+.brand{font-family:'DM Serif Display';font-size:23px;letter-spacing:-.45px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.brand img{display:block;width:36px;height:36px;object-fit:contain;flex:none}
+.brand span{line-height:1}
 .topbar nav{display:flex;gap:clamp(16px,2.4vw,32px);font-size:13px;white-space:nowrap}
 .topbar nav button{position:relative;padding:4px 0;transition:color .25s}
 .topbar nav button:after{content:'';position:absolute;left:0;right:100%;bottom:0;height:1px;background:var(--gold);transition:right .32s var(--ease)}
