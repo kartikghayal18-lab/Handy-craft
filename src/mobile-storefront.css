@@ -1,6 +1,13 @@
 /* Dedicated phone storefront layer. Desktop keeps its existing composition. */
 /* Kept as a separate late import so phone rules intentionally override desktop defaults. */
-.mobile-store-header,.mobile-hero{display:none}
+.mobile-store-header,.mobile-hero,.mobile-shop-categories,.category-route-heading{display:none}
+
+.cart-success{position:fixed;z-index:80;left:50%;bottom:28px;width:min(430px,calc(100% - 32px));transform:translateX(-50%);display:grid;grid-template-columns:48px 1fr;gap:12px;padding:18px;background:#fffdf9;border:1px solid #e9ded4;border-radius:18px;box-shadow:0 22px 60px rgba(46,30,22,.22);animation:cartSuccessIn .42s cubic-bezier(.2,.9,.25,1.15)}
+.cart-success-check{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#e3f3e7;color:#297645;font-size:23px;font-weight:800;animation:checkPop .48s .08s both}
+.cart-success-copy strong{display:block;font:22px/1.05 'DM Serif Display',serif;color:var(--ink)}.cart-success-copy p{margin:5px 0 0;font-size:12px;line-height:1.4;color:var(--ink-soft)}
+.cart-success-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:9px}.cart-success-actions button{min-height:42px;border:1px solid var(--rose);border-radius:10px;font-size:11px;font-weight:700;color:var(--rose-deep)}.cart-success-actions button:last-child{background:var(--rose);color:#fff}
+.cart-success-confetti{position:absolute;inset:0;pointer-events:none}.cart-success-confetti i{position:absolute;width:5px;height:9px;background:var(--rose);border-radius:3px;animation:confettiPop .7s both}.cart-success-confetti i:nth-child(1){left:12%;top:8%;transform:rotate(25deg)}.cart-success-confetti i:nth-child(2){left:31%;top:3%;background:#d5a448}.cart-success-confetti i:nth-child(3){right:28%;top:5%;background:#70a27f}.cart-success-confetti i:nth-child(4){right:12%;top:14%;transform:rotate(-25deg)}.cart-success-confetti i:nth-child(5){left:48%;top:1%;background:#d5a448}
+@keyframes cartSuccessIn{from{opacity:0;transform:translate(-50%,18px) scale(.94)}to{opacity:1;transform:translate(-50%,0) scale(1)}}@keyframes checkPop{from{transform:scale(.25);opacity:0}to{transform:scale(1);opacity:1}}@keyframes confettiPop{from{opacity:0;translate:0 18px;rotate:0}to{opacity:1;translate:0 0;rotate:140deg}}
 
 @media (max-width:768px){
   html,body,#root{width:100%;max-width:100%}
@@ -34,6 +41,10 @@
   .mobile-hero h1{font-size:clamp(34px,10vw,44px);max-width:340px;line-height:.98;letter-spacing:-1.25px;margin-bottom:10px}.mobile-hero h1 i{color:var(--rose)}
   .mobile-hero p:not(.eyebrow){max-width:320px;margin-bottom:16px;font-size:13px;line-height:1.5;color:var(--ink-soft)}.mobile-hero .primary{min-height:48px;padding:0 18px;font-size:12px}
   .hero{display:none}
+  .mobile-category-nav{display:none}
+  .mobile-shop-categories{display:block;padding:28px 0 24px;background:var(--cream);overflow:hidden}
+  .mobile-section-title{display:flex;align-items:end;justify-content:space-between;padding:0 16px 15px}.mobile-section-title p{margin:0 0 3px;color:var(--rose-deep);font-size:8px;text-transform:uppercase;letter-spacing:1px}.mobile-section-title h2{font:24px/1.05 'DM Serif Display',serif;margin:0}.mobile-section-title>a{color:var(--rose-deep);font-size:10px;text-decoration:underline}
+  .mobile-shop-category-rail{display:flex;gap:13px;overflow-x:auto;padding:2px 16px 8px;scroll-snap-type:x mandatory;scrollbar-width:none}.mobile-shop-category-rail::-webkit-scrollbar{display:none}.mobile-shop-category-rail a{flex:0 0 72px;text-align:center;scroll-snap-align:start}.mobile-shop-category-rail img{display:block;width:68px;height:68px;border-radius:50%;object-fit:cover;padding:2px;border:1px solid #dfd1c5;background:#fff}.mobile-shop-category-rail span{display:block;margin-top:7px;font-size:10px;line-height:1.2;color:var(--ink)}
   .trust-strip{grid-template-columns:1fr;gap:11px;padding:20px 16px}
   .mk-marquee-track span{font-size:9px;padding:8px 18px}
   .section{width:100%;max-width:none;min-width:0;padding-left:16px;padding-right:16px}
@@ -47,6 +58,13 @@
      Realign their negative margins so their boxes land exactly at the viewport edge instead of past it. */
   .filter-row{margin-left:-16px!important;margin-right:-16px!important;padding:0 16px}
   .mk-photo-strip.mobile-memory-strip{margin-inline:-16px;padding-inline:16px}
+  .occasions,.coverflow-section,.discover{display:none}
+  .best-sellers{padding-top:34px}.best-sellers .section-head{margin-bottom:18px}.best-sellers .section-head .eyebrow{font-size:8px}.best-sellers .section-head h2{font-size:25px;line-height:1.05}.best-sellers .catalog-grid{gap:26px 9px}.best-sellers .catalog-image{border-radius:12px}.best-sellers .catalog-copy h3{font:600 12px/1.28 'DM Sans',sans-serif;min-height:31px}.best-sellers .catalog-description{display:none}.best-sellers .catalog-category{font-size:7px}.best-sellers .catalog-add{min-height:37px;border-radius:9px;justify-content:center;background:var(--rose);color:#fff;border:0;font-size:10px}
+  .how-story{padding-top:54px;padding-bottom:54px}.photo-to-gift,.featured-spread,.gallery,.final-cta{padding-top:54px;padding-bottom:54px}
+  .bottom-nav{padding-bottom:env(safe-area-inset-bottom)}.bottom-nav .active{color:var(--rose-deep)}
+  .category-route-heading{display:block;margin:18px 14px 0}.category-route-heading p{display:flex;gap:6px;margin:0 0 8px;font-size:9px;color:var(--ink-faint)}.category-route-heading h1{font:32px/1 'DM Serif Display',serif;margin:0 0 4px}.category-route-heading small{font-size:10px;color:var(--ink-soft)}
+  .category-page .category-hero,.category-page .category-quick{display:none}.category-page .category-products{padding-top:18px}.category-page .category-products>.category-title{display:none}.category-page .catalog-controls{margin-top:0}
+  .cart-success{bottom:calc(78px + env(safe-area-inset-bottom));padding:15px;border-radius:16px}
 }
 
 @media (max-width:340px){
