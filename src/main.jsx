@@ -360,7 +360,7 @@ function Checkout({cart, close, complete}) {
     if(!/^[0-9]{6}$/.test(form.postal_code.trim())){setError('Enter a valid 6-digit postal code.');return;}
     if(form.email.trim()&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())){setError('Enter a valid email address.');return;}
     const razorpayKey=import.meta.env.VITE_RAZORPAY_KEY_ID?.trim();
-    if(!razorpayKey?.startsWith('rzp_test_')){setError('Secure test checkout is not configured.');return;}
+    if(!/^rzp_(test|live)_/.test(razorpayKey||'')){setError('Secure checkout is not configured.');return;}
     if(paymentInProgress.current)return;
     paymentInProgress.current=true;
     setBusy(true);

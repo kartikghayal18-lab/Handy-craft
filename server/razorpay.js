@@ -1,10 +1,25 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const MAX_ITEMS = 50;
 const MAX_QUANTITY = 20;
 const TOKEN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let persistenceCheck;
+
+function readLocalDevelopmentEnv(name) {
+  for (const filename of ['.env.local', '.env']) {
+    const envPath = path.resolve(process.cwd(), filename);
+    if (!fs.existsSync(envPath)) continue;
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = fs.readFileSync(envPath, 'utf8').match(new RegExp(`^${escapedName}\\s*=\\s*([^\\r\\n]*)`, 'm'));
+    const value = match?.[1]?.trim().replace(/^(['"])(.*)\1$/, '$2');
+    if (value) return value;
+  }
+
+  return '';
+}
 
 export class CheckoutError extends Error {
   constructor(message, status = 400, code = 'CHECKOUT_ERROR') {
@@ -16,7 +31,7 @@ export class CheckoutError extends Error {
 
 export function requireServerEnv(name, fallbacks = []) {
   for (const key of [name, ...fallbacks]) {
-    const value = process.env[key]?.trim();
+    const value = readLocalDevelopmentEnv(key) || process.env[key]?.trim();
     if (value) return value;
   }
   throw new CheckoutError(`Server configuration is missing ${name}.`, 500, 'SERVER_CONFIGURATION_ERROR');
@@ -151,8 +166,8 @@ export async function assertPaymentPersistenceConfigured() {
 function razorpayAuth() {
   const keyId = requireServerEnv('RAZORPAY_KEY_ID');
   const keySecret = requireServerEnv('RAZORPAY_KEY_SECRET');
-  if (!keyId.startsWith('rzp_test_')) {
-    throw new CheckoutError('Razorpay must use a test-mode key for this integration.', 500, 'RAZORPAY_TEST_MODE_REQUIRED');
+  if (!/^rzp_(test|live)_/.test(keyId)) {
+    throw new CheckoutError('Razorpay key ID is invalid.', 500, 'RAZORPAY_CONFIGURATION_ERROR');
   }
   return { keyId, keySecret, authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}` };
 }
