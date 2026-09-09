@@ -1,0 +1,17 @@
+{
+  "name": "Forever Handy",
+  "short_name": "Forever Handy",
+  "description": "Capturing Your Forever Moments",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf7f1",
+  "theme_color": "#fbf7f1",
+  "icons": [
+    {
+      "src": "/forever-handy-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
