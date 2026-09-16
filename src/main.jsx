@@ -21,6 +21,9 @@ const categories = ['Birthday', 'Anniversary', 'Love', 'Friendship', 'Raksha Ban
 const rupee = (amount) => `₹${amount.toLocaleString('en-IN')}`;
 const FALLBACK_PRODUCT_IMAGE = '/images/memory-kraft-collection.png';
 const PRODUCT_IMAGE_BUCKET = 'product-images';
+// Matches server/personalization.js's MAX_FILE_BYTES — kept in sync so a customer finds out a
+// photo is too large at selection time instead of after paying.
+const MAX_PERSONALIZATION_PHOTO_BYTES = 3 * 1024 * 1024;
 
 // Normalizes whatever a product's image field actually holds into a usable <img> src.
 // Handles: a full http(s) URL (returned as-is, never re-resolved), a bucket-relative
@@ -155,6 +158,84 @@ function CategoryPage({ products, catalogState, retry, count, favourites, onFavo
       <section className="category-editorial"><img src="/images/memory-kraft-collection.png" alt="Forever Handy keepsake collection"/><div><p className="eyebrow">Made by hand</p><h2>A little gift. A lasting memory.</h2><button className="text-link" onClick={explore}>Explore the collection</button></div></section>
     </main>
     <nav className="category-bottom-nav" aria-label="Store navigation"><a href="/"><Icon name="home"/><span>Home</span></a><a className="active" href="/categories"><Icon name="compass"/><span>Categories</span></a><button onClick={explore}><Icon name="heart"/><span>Gifts</span></button><button className="bag" onClick={onCart}><Icon name="bag"/><span>Cart</span>{count>0&&<b>{count}</b>}</button></nav>
+  </div>;
+}
+
+// Real order_status progression, taken from the same enum the admin dashboard's status
+// dropdown uses (src/admin/AdminApp.jsx's `states`) — never invented labels like "Out for
+// delivery" that don't exist in the schema. cancelled/refunded are handled separately, not as
+// timeline steps, since they don't sit on the pending→delivered path.
+const TRACK_STATUS_STEPS = ['pending', 'confirmed', 'preparing', 'ready', 'shipped', 'delivered'];
+const TRACK_STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', preparing: 'Preparing', ready: 'Ready', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded' };
+
+function OrderStatusTimeline({ status }) {
+  if (status === 'cancelled') return <div className="track-status-banner track-status-cancelled"><Icon name="close" size={18}/><div><strong>Order cancelled</strong><p>This order was cancelled and is not being processed.</p></div></div>;
+  if (status === 'refunded') return <div className="track-status-banner track-status-refunded"><Icon name="close" size={18}/><div><strong>Order refunded</strong><p>This order has been refunded.</p></div></div>;
+  const currentIndex = Math.max(0, TRACK_STATUS_STEPS.indexOf(status));
+  return <ol className="track-timeline" aria-label="Order status timeline">{TRACK_STATUS_STEPS.map((step, index) => <li key={step} className={index <= currentIndex ? 'is-done' : ''} aria-current={index === currentIndex ? 'step' : undefined}><span className="track-timeline-dot"/><span className="track-timeline-label">{TRACK_STATUS_LABELS[step]}</span></li>)}</ol>;
+}
+
+function TrackOrderPage() {
+  const [form, setForm] = useState({ orderId: '', phone: '' });
+  const [state, setState] = useState('form'); // 'form' | 'loading' | 'error' | 'result'
+  const [error, setError] = useState('');
+  const [order, setOrder] = useState(null);
+  const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
+
+  const submit = async event => {
+    event.preventDefault();
+    setError('');
+    if (!form.orderId.trim() || !form.phone.trim()) { setError('Please enter both your Order ID and mobile number.'); return; }
+    setState('loading');
+    try {
+      const params = new URLSearchParams({ orderId: form.orderId.trim(), phone: form.phone.trim() });
+      const response = await fetch(`/api/orders/track?${params.toString()}`);
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.order) {
+        setError(data?.error || 'Order not found. Please check your details.');
+        setState('error');
+        return;
+      }
+      setOrder(data.order);
+      setState('result');
+    } catch (err) {
+      console.error('[track-order] lookup failed', err);
+      setError('Something went wrong. Please try again.');
+      setState('error');
+    }
+  };
+
+  const trackAnother = () => { setOrder(null); setForm({ orderId: '', phone: '' }); setState('form'); setError(''); };
+
+  return <div className="category-page track-order-page">
+    <header className="category-header"><BrandLogo href="/"/></header>
+    <main className="track-order-main">
+      <section className="track-order-hero"><p className="eyebrow">Order tracking</p><h1>Track your order</h1><p className="lede">Enter your Order ID and the mobile number used at checkout to see your order's current status.</p></section>
+
+      {state !== 'result' && <form className="checkout-form track-order-form" onSubmit={submit}>
+        <label className="text-field checkout-wide"><span>Order ID</span><input required placeholder="MK-XXXXXXXXXX" value={form.orderId} onChange={e=>set('orderId', e.target.value)} autoCapitalize="characters"/></label>
+        <label className="text-field checkout-wide"><span>Mobile number</span><input required inputMode="tel" placeholder="Used at checkout" value={form.phone} onChange={e=>set('phone', e.target.value)}/></label>
+        {state === 'error' && <div className="checkout-warning checkout-wide" role="alert"><strong>Order not found</strong><p>{error}</p></div>}
+        <button className="primary full checkout-wide" disabled={state === 'loading'}>{state === 'loading' ? 'Looking up your order…' : 'Track order'} <Icon name="arrow"/></button>
+      </form>}
+
+      {state === 'result' && order && <div className="track-order-result">
+        <div className="track-order-summary"><p className="eyebrow">Order</p><h2>#{order.order_number}</h2><small>{order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></div>
+
+        <OrderStatusTimeline status={order.order_status}/>
+
+        {order.payment_status === 'failed' && <div className="checkout-warning checkout-wide" role="alert"><strong>Payment not completed</strong><p>Payment for this order was not successful.</p></div>}
+
+        <div className="track-order-details">
+          <div><b>Customer</b><p>{order.customer_name || '—'}</p></div>
+          <div><b>Delivery address</b><p>{order.delivery_address?.address}<br/>{order.delivery_address?.city}, {order.delivery_address?.state} {order.delivery_address?.postal_code}</p></div>
+          <div><b>Items</b>{(order.items || []).map((item, index) => <p key={index}>{item.product_name} × {item.quantity} — {rupee(item.price)}</p>)}</div>
+          <div><b>Total</b><p>{rupee(order.total)}</p></div>
+        </div>
+
+        <button type="button" className="text-link checkout-wide" onClick={trackAnother}>Track another order</button>
+      </div>}
+    </main>
   </div>;
 }
 
@@ -340,6 +421,7 @@ function App() {
   useEffect(() => { const openAdminLogin = event => { if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'o') { event.preventDefault(); location.assign('/admin/login'); } }; window.addEventListener('keydown', openAdminLogin); return () => window.removeEventListener('keydown', openAdminLogin); }, []);
   const selectOccasion = occasion => { setSelectedOccasion(occasion); window.setTimeout(goProducts, 220); };
   if (location.pathname === '/categories') return <><CategoryPage products={catalogProducts} catalogState={catalogState} retry={loadCatalog} count={count} favourites={favourites} onFavourite={id=>setFavourites(items=>items.includes(id)?items.filter(item=>item!==id):[...items,id])} onView={setSelected} onAdd={add} onCart={()=>setDrawer(true)}/>{cartNotice&&<CartSuccess notice={cartNotice} close={()=>setCartNotice(null)} viewCart={()=>{setCartNotice(null);setDrawer(true)}}/>}{selected && <ProductModal product={selected} close={() => setSelected(null)} add={(customization,quantity) => { add(selected, customization, quantity); setSelected(null); }}/>} {drawer && <CartDrawer cart={cart} total={total} close={() => setDrawer(false)} checkout={()=>{setDrawer(false);setCheckout(true)}} remove={remove} changeQuantity={changeQuantity}/>} {checkout && <Checkout cart={cart} close={()=>setCheckout(false)} complete={()=>{setCart([]);setCheckout(false)}}/>}</>;
+  if (location.pathname === '/track-order') return <TrackOrderPage/>;
   const goSection = id => () => document.getElementById(id)?.scrollIntoView({behavior:'smooth'});
   return <><ScrollProgress/><Marquee/><header className={`topbar ${scrolled ? 'is-scrolled' : ''}`}><BrandLogo/><nav><button onClick={goProducts}>Gifts</button><button onClick={goSection('discover')}>Shop by Person</button><button onClick={goSection('occasions')}>Occasions</button><button onClick={goSection('story')}>Our story</button></nav><div className="header-actions"><button aria-label="Search gifts" onClick={goProducts}><Icon name="search"/></button><button aria-label="View wishlist" onClick={showMobileWishlist}><Icon name="heart"/></button><button className={`bag ${bagBump ? 'bump' : ''}`} aria-label="Open cart" onClick={() => setDrawer(true)}><Icon name="bag"/><span>{count}</span></button></div></header>
   <header className={`mobile-store-header ${scrolled ? 'is-scrolled' : ''}`}><div className="mobile-header-bar"><button aria-label="Open shop menu" aria-expanded={mobileMenuOpen} onClick={()=>setMobileMenuOpen(open=>!open)}><Icon name="menu"/></button><BrandLogo/><div><button aria-label="View wishlist" onClick={showMobileWishlist}><Icon name="heart"/></button><button className={`bag ${bagBump ? 'bump' : ''}`} aria-label="Open cart" onClick={() => setDrawer(true)}><Icon name="bag"/><span>{count}</span></button></div></div><div className="mobile-search"><Icon name="search" size={18}/><input value={mobileSearch} onChange={event=>{setWishlistOnly(false);setMobileSearch(event.target.value)}} placeholder="Search gifts, photos, frames…" aria-label="Search gifts"/>{mobileSearch&&<button aria-label="Clear search" onClick={()=>setMobileSearch('')}><Icon name="close" size={16}/></button>}</div><nav className="mobile-category-nav" aria-label="Shop categories">{mobileCategoryItems.map((name,index)=>{const match=catalogProducts.find(product=>product.categories?.includes(name));return <a href={`/categories?category=${encodeURIComponent(name)}`} key={name}><img src={match?.image || (index % 2 ? '/images/memory-kraft-collection.png' : '/images/memory-kraft-hero.png')} alt=""/><span>{name}</span></a>})}</nav>{mobileMenuOpen&&<nav className="mobile-menu-panel" aria-label="Shop menu"><a href="/categories">Shop all gifts</a><button onClick={()=>{setMobileMenuOpen(false);goProducts();}}>Best sellers</button><button onClick={()=>{setMobileMenuOpen(false);document.getElementById('occasions')?.scrollIntoView({behavior:'smooth'});}}>Occasions</button><button onClick={()=>{setMobileMenuOpen(false);document.getElementById('discover')?.scrollIntoView({behavior:'smooth'});}}>Shop by person</button><button onClick={()=>{setMobileMenuOpen(false);document.getElementById('story').scrollIntoView({behavior:'smooth'});}}>Our story</button></nav>}</header>
@@ -372,17 +454,34 @@ function App() {
 }
 
 function ProductModal({product, close, add}) {
-  const [files,setFiles]=useState([]),[note,setNote]=useState(''),[galleryIndex,setGalleryIndex]=useState(0),[quantity,setQuantity]=useState(1),[saved,setSaved]=useState(false);
+  const [files,setFiles]=useState([]),[note,setNote]=useState(''),[galleryIndex,setGalleryIndex]=useState(0),[quantity,setQuantity]=useState(1),[saved,setSaved]=useState(false),[fileWarning,setFileWarning]=useState('');
+  const selectFiles=event=>{const picked=Array.from(event.target.files||[]);const tooLarge=picked.filter(file=>file.size>MAX_PERSONALIZATION_PHOTO_BYTES);setFiles(picked.filter(file=>file.size<=MAX_PERSONALIZATION_PHOTO_BYTES));setFileWarning(tooLarge.length?`${tooLarge.length} photo${tooLarge.length>1?'s were':' was'} too large (max ${Math.round(MAX_PERSONALIZATION_PHOTO_BYTES/(1024*1024))}MB each) and ${tooLarge.length>1?"weren't":"wasn't"} added.`:'');};
   const gallery=product.gallery?.length?product.gallery:[product.image];
   const discount=product.regularPrice>product.price?Math.round((1-product.price/product.regularPrice)*100):0;
   const optionValues=String(product.dimensions||'').split(/[,|]/).map(value=>value.trim()).filter(Boolean);
   const previews=useMemo(()=>files.map(file=>({name:file.name,url:URL.createObjectURL(file)})),[files]);
   useEffect(()=>()=>previews.forEach(preview=>URL.revokeObjectURL(preview.url)),[previews]);
   const share=async()=>{if(navigator.share)await navigator.share({title:product.name,url:location.href});else await navigator.clipboard?.writeText(location.href)};
-  return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/>{product.badge&&<span>{product.badge}</span>}<div className="product-image-actions"><button onClick={()=>setSaved(value=>!value)} aria-label="Save product">{saved?'♥':'♡'}</button><button onClick={share} aria-label="Share product">↗</button></div></div><div className="product-gallery-thumbs">{gallery.map((image,index)=><button key={`${image}-${index}`} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Show product photo ${index+1}`}><img src={image} alt=""/></button>)}</div><div className="product-gallery-dots">{gallery.map((_,index)=><button key={index} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Photo ${index+1}`}/>)}</div></div><div className="product-details"><p className="eyebrow">{product.categories?.[0]||'Thoughtful gift'}</p><h2>{product.name}</h2><div className="product-price-line"><strong className="modal-price">{rupee(product.price)}</strong>{discount>0&&<><s>{rupee(product.regularPrice)}</s><small>{discount}% off</small></>}</div><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="product-feature-badges"><span>♡ {product.personalizable?'Personalizable':'Thoughtfully made'}</span><span>✓ High quality</span><span>✦ Perfect gift</span></div>{optionValues.length>0&&<fieldset className="product-options"><legend>Select size</legend>{optionValues.map(value=><label key={value}><input type="radio" name="product-size" value={value}/><span>{value}</span></label>)}</fieldset>}<div className="product-quantity"><span>Quantity</span><div><button onClick={()=>setQuantity(value=>Math.max(1,value-1))} aria-label="Decrease quantity">−</button><b>{quantity}</b><button onClick={()=>setQuantity(value=>value+1)} aria-label="Increase quantity">+</button></div></div>{product.personalizable&&<div className="personalization-panel"><div className="personalization-heading"><div><p className="eyebrow">Personalize your gift</p><h3>Add your memories</h3></div><span>Optional</span></div><label className="upload upload-zone"><input type="file" accept="image/*" multiple onChange={event=>setFiles(Array.from(event.target.files||[]))}/><Icon name="plus"/><span><b>Choose photos</b><small>Add the memories this product supports.</small></span></label>{previews.length>0&&<div className="upload-previews">{previews.map((preview,index)=><PolaroidPhoto key={preview.url} image={preview.url} alt={`Selected photo ${index+1}`} size="sm" rotation={`${index%2?4:-4}deg`}/>)}</div>}<label className="text-field">A note for them <input value={note} onChange={event=>setNote(event.target.value)} placeholder="Write something from the heart"/></label></div>}<div className="product-info-accordions"><details open><summary>Delivery information</summary><p>{product.delivery_information||'Delivery availability and timing are confirmed at checkout.'}</p></details><details><summary>Perfect for</summary><p>{product.categories?.join(', ')||'Thoughtful gifting moments.'}</p></details></div><div className="product-sticky-actions"><button className="secondary" onClick={()=>add({photoCount:files.length,note:note.trim()},quantity)}>Buy now</button><button className="primary" onClick={()=>add({photoCount:files.length,note:note.trim()},quantity)}>Add to cart · {rupee(product.price*quantity)}</button></div></div></div></div>;
+  return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/>{product.badge&&<span>{product.badge}</span>}<div className="product-image-actions"><button onClick={()=>setSaved(value=>!value)} aria-label="Save product">{saved?'♥':'♡'}</button><button onClick={share} aria-label="Share product">↗</button></div></div><div className="product-gallery-thumbs">{gallery.map((image,index)=><button key={`${image}-${index}`} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Show product photo ${index+1}`}><img src={image} alt=""/></button>)}</div><div className="product-gallery-dots">{gallery.map((_,index)=><button key={index} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Photo ${index+1}`}/>)}</div></div><div className="product-details"><p className="eyebrow">{product.categories?.[0]||'Thoughtful gift'}</p><h2>{product.name}</h2><div className="product-price-line"><strong className="modal-price">{rupee(product.price)}</strong>{discount>0&&<><s>{rupee(product.regularPrice)}</s><small>{discount}% off</small></>}</div><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="product-feature-badges"><span>♡ {product.personalizable?'Personalizable':'Thoughtfully made'}</span><span>✓ High quality</span><span>✦ Perfect gift</span></div>{optionValues.length>0&&<fieldset className="product-options"><legend>Select size</legend>{optionValues.map(value=><label key={value}><input type="radio" name="product-size" value={value}/><span>{value}</span></label>)}</fieldset>}<div className="product-quantity"><span>Quantity</span><div><button onClick={()=>setQuantity(value=>Math.max(1,value-1))} aria-label="Decrease quantity">−</button><b>{quantity}</b><button onClick={()=>setQuantity(value=>value+1)} aria-label="Increase quantity">+</button></div></div>{product.personalizable&&<div className="personalization-panel"><div className="personalization-heading"><div><p className="eyebrow">Personalize your gift</p><h3>Add your memories</h3></div><span>Optional</span></div><label className="upload upload-zone"><input type="file" accept="image/*" multiple onChange={selectFiles}/><Icon name="plus"/><span><b>Choose photos</b><small>Add the memories this product supports.</small></span></label>{fileWarning&&<p className="form-error">{fileWarning}</p>}{previews.length>0&&<div className="upload-previews">{previews.map((preview,index)=><PolaroidPhoto key={preview.url} image={preview.url} alt={`Selected photo ${index+1}`} size="sm" rotation={`${index%2?4:-4}deg`}/>)}</div>}<label className="text-field">A note for them <input value={note} onChange={event=>setNote(event.target.value)} placeholder="Write something from the heart"/></label></div>}<div className="product-info-accordions"><details open><summary>Delivery information</summary><p>{product.delivery_information||'Delivery availability and timing are confirmed at checkout.'}</p></details><details><summary>Perfect for</summary><p>{product.categories?.join(', ')||'Thoughtful gifting moments.'}</p></details></div><div className="product-sticky-actions"><button className="secondary" onClick={()=>add({photoCount:files.length,note:note.trim(),files},quantity)}>Buy now</button><button className="primary" onClick={()=>add({photoCount:files.length,note:note.trim(),files},quantity)}>Add to cart · {rupee(product.price*quantity)}</button></div></div></div></div>;
 }
 function CartDrawer({cart, total, close, checkout, remove, changeQuantity}) { return <div className="overlay cart-overlay" role="dialog" aria-modal="true" aria-label="Cart"><aside className="cart-drawer"><div className="cart-head"><div><p className="eyebrow">Ready when you are</p><h2>Your gift bag</h2></div><button onClick={close} aria-label="Close cart"><Icon name="close"/></button></div>{cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><ProductArt kind={item.art} image={item.image}/><div className="cart-item-copy"><h3>{item.name}</h3><p>{item.type}</p>{item.customization && <small>{item.customization.photoCount ? `${item.customization.photoCount} personal photo${item.customization.photoCount > 1 ? 's' : ''}` : 'No photos selected'}{item.customization.note ? ' · personal note added' : ''}</small>}<div className="cart-line-bottom"><div className="quantity-control" aria-label={`Quantity for ${item.name}`}><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Decrease quantity of ${item.name}`}>−</button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Increase quantity of ${item.name}`}>+</button></div><strong>{rupee(item.price * item.quantity)}</strong></div></div><button className="remove-item" onClick={() => remove(item.id)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><strong>{rupee(total)}</strong></p><small>Secure checkout powered by Razorpay.</small><button className="primary full" onClick={checkout}>Checkout <Icon name="arrow"/></button></div></> : <div className="empty-cart"><span>♡</span><h3>Your bag is waiting for a memory.</h3><button className="primary" onClick={close}>Explore gifts</button></div>}</aside></div> }
 
+const fileToBase64=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file);});
+// Uploads any personalization photos attached to cart items, one product at a time, to the
+// order that payment was just confirmed for. Called only after the order already exists and
+// is paid — a failed or partial upload here never affects the order itself, so it is always
+// fire-and-forget from the caller's perspective (errors are logged, never thrown outward).
+async function uploadPersonalizationPhotos(orderId,cart){
+  if(!orderId)return;
+  const itemsWithPhotos=cart.filter(item=>item.customization?.files?.length);
+  for(const item of itemsWithPhotos){
+    try{
+      const files=await Promise.all(item.customization.files.map(async file=>({filename:file.name,contentType:file.type,dataBase64:await fileToBase64(file)})));
+      const response=await fetch('/api/personalization/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_id:orderId,product_id:item.id,files})});
+      if(!response.ok){const data=await response.json().catch(()=>({}));console.error('[personalization] upload failed for',item.name,data.error||response.status);}
+    }catch(err){console.error('[personalization] could not upload photos for',item.name,err);}
+  }
+}
 function Checkout({cart, close, complete}) {
   const [form,setForm]=useState({name:'',phone:'',email:'',address:'',city:'',state:'',postal_code:''});
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[order,setOrder]=useState(null);
@@ -396,6 +495,7 @@ function Checkout({cart, close, complete}) {
     if(!verified.verified||!verified.order)throw new Error('Payment could not be verified.');
     pendingVerification.current=null;
     setOrder(verified.order);
+    uploadPersonalizationPhotos(verified.order.id,cart).catch(err=>console.error('[personalization] upload failed',err));
   };
   const place=async event=>{
     event.preventDefault();

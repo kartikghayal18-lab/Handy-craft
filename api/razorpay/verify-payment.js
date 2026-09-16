@@ -1,4 +1,5 @@
 import { CheckoutError, allowPost, fetchRazorpayPayment, finalizeSupabaseOrder, parseBody, sendError, verifyCheckoutToken, verifyPaymentSignature } from '../../server/razorpay.js';
+import { sendOrderConfirmationEmail } from '../../server/email.js';
 
 export default async function handler(req, res) {
   if (!allowPost(req, res)) return;
@@ -29,6 +30,17 @@ export default async function handler(req, res) {
       razorpayPaymentId: paymentId,
       paidAmount: payment.amount,
     });
+    // Sent only after the order has actually been created above. This is awaited (rather than
+    // truly fire-and-forget) because a Vercel serverless function can be frozen/torn down right
+    // after the response is sent, which would silently drop an unawaited send — but
+    // sendOrderConfirmationEmail itself never throws, so a failed or skipped email can never
+    // turn a successful payment into an error response.
+    await sendOrderConfirmationEmail({
+      to: checkout.shipping?.email,
+      customerName: checkout.shipping?.name,
+      orderNumber: order?.order_number,
+    });
+
     res.status(200).json({ verified: true, order });
   } catch (error) {
     sendError(res, error);
