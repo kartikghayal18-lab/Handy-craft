@@ -73,7 +73,7 @@ function Products(){
   return <><div className="products-toolbar"><div className="products-filters"><input aria-label="Search products" placeholder="Search products" value={query} onChange={event=>setQuery(event.target.value)}/><select aria-label="Filter by category" value={category} onChange={event=>setCategory(event.target.value)}><option value="all">All categories</option>{(cats.data||[]).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><select aria-label="Filter by status" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">All statuses</option>{['active','draft','out_of_stock','archived'].map(item=><option key={item}>{item.replaceAll('_',' ')}</option>)}</select></div><Button onClick={()=>setEditing({})}>Add product</Button></div>{filtered.length?<section className="product-grid">{filtered.map(product=>{const image=product.main_image||product.product_images?.[0]?.public_url;const categories=product.product_categories?.map(item=>item.category?.name).filter(Boolean).join(', ')||'Uncategorised';return <article className="product-card" key={product.id}><div className="product-card-image">{image?<img src={image} alt={product.name}/>:<span>MK</span>}<Status>{product.status}</Status></div><div className="product-card-body"><p>{categories}</p><h2>{product.name}</h2><div className="product-pricing"><strong>{money(product.sale_price||product.price)}</strong>{product.sale_price&&<s>{money(product.price)}</s>}</div><div className="product-meta"><span>Stock <b>{product.stock_quantity}</b></span><span>{date(product.updated_at)}</span></div><div className="product-card-actions"><Button className="quiet" onClick={()=>setEditing(product)}>Edit</Button><Button className="quiet" onClick={async()=>{try{await archiveProduct(product.id);done('Product archived')}catch(error){setToast('The product could not be archived. Please try again.')}}}>Archive</Button><Button className="danger" onClick={()=>remove(product)}>Delete</Button></div></div></article>})}</section>:<State title="No products found" action={<Button onClick={()=>setEditing({})}>Add product</Button>}>Try adjusting your filters or add the first product.</State>}{editing&&<ProductForm product={editing.id?editing:null} categories={cats.data||[]} close={()=>setEditing(null)} onDone={done}/>} {toast&&<div className="toast">{toast}</div>}</>;
 }
 
-function Orders(){const data=useData(getOrders),[filter,setFilter]=useState('all'),[selected,setSelected]=useState(null);if(data.loading)return <State type="loading" title="Loading orders"/>;if(data.error)return <State type="error" title="Orders are unavailable" action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;const list=(data.data||[]).filter(x=>filter==='all'||x.order_status===filter);return <><div className="page-tools"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option>{states.map(x=><option key={x}>{x}</option>)}</select></div>{list.length?<Table headers={['Order #','Customer','Items','Total','Payment','Status','Date','']}>{list.map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.payment_status}</Status></td><td><Status>{o.order_status}</Status></td><td>{date(o.created_at)}</td><td><Button className="quiet" onClick={()=>setSelected(o)}>View</Button></td></tr>)}</Table>:<State title="No orders yet">Paid customer orders will appear here.</State>}{selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}</>;}
+function Orders(){const data=useData(getPersonalizationOrders),[filter,setFilter]=useState('all'),[selected,setSelected]=useState(null);if(data.loading)return <State type="loading" title="Loading orders"/>;if(data.error)return <State type="error" title="Orders are unavailable" action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;const list=(data.data||[]).filter(x=>filter==='all'||x.order_status===filter);return <><div className="page-tools"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option>{states.map(x=><option key={x}>{x}</option>)}</select></div>{list.length?<Table headers={['Order #','Customer','Items','Total','Payment','Status','Date','']}>{list.map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.payment_status}</Status></td><td><Status>{o.order_status}</Status></td><td>{date(o.created_at)}</td><td><Button className="quiet" onClick={()=>setSelected(o)}>View</Button></td></tr>)}</Table>:<State title="No orders yet">Paid customer orders will appear here.</State>}{selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}</>;}
 function OrderModal({order,close,refresh}){
   const [status,setStatus]=useState(order.order_status),[busy,setBusy]=useState(false),[error,setError]=useState('');
   // Only calls updateOrderStatus (and the notification) when the status actually changed —
@@ -90,10 +90,14 @@ function OrderModal({order,close,refresh}){
       refresh();close();
     }catch(e){setError(e.message)}finally{setBusy(false)}
   };
+  // order.email is the customer's real, checkout-validated email saved directly on the order
+  // (see server/razorpay.js finalizeSupabaseOrder); customer.email is only a fallback for
+  // orders placed before that column existed.
+  const customerEmail=order.email||order.customer?.email;
   return <Modal close={close}><p className="admin-kicker">Order ID · {order.order_number}</p><h2>Order details</h2><div className="order-detail">
-    <p><b>Customer</b>{order.customer?.name||order.shipping_name||'—'}<br/>{order.customer?.email?<a href={`mailto:${order.customer.email}`}>{order.customer.email}</a>:'No email on file'}<br/>{order.shipping_phone?<a href={`tel:${order.shipping_phone.replace(/[^+\d]/g,'')}`}>{order.shipping_phone}</a>:'Not provided'}</p>
+    <p><b>Customer</b>{order.customer?.name||order.shipping_name||'—'}<br/>{customerEmail?<a href={`mailto:${customerEmail}`}>{customerEmail}</a>:'No email on file'}<br/>{order.shipping_phone?<a href={`tel:${order.shipping_phone.replace(/[^+\d]/g,'')}`}>{order.shipping_phone}</a>:'Not provided'}</p>
     <p><b>Delivery address</b>{order.shipping_name}<br/>{order.shipping_address}<br/>{order.shipping_city}{order.shipping_city&&order.shipping_state?', ':''}{order.shipping_state}{order.shipping_postal_code?` – ${order.shipping_postal_code}`:''}</p>
-    <p><b>Items</b>{order.order_items?.map(i=><span key={i.id}>{i.product_name_snapshot} × {i.quantity} — {money(i.price_snapshot)}{i.customization_text&&` · ${i.customization_text}`}</span>)}</p>
+    <div><b>Items</b>{order.order_items?.map(i=><div key={i.id} className="order-item-line"><span>{i.product_name_snapshot} × {i.quantity} — {money(i.price_snapshot)}{i.customization_text&&` · ${i.customization_text}`}</span><PersonalizationPhotos assets={i.personalization_assets}/></div>)}</div>
     <p><b>Order date</b>{date(order.created_at)}</p>
     <p><b>Payment status</b><Status>{order.payment_status}</Status></p>
     <p><b>Total amount</b>{money(order.total)}</p>
@@ -108,15 +112,18 @@ function InventoryModal({p,refresh,close}){const [quantity,setQuantity]=useState
 function Customers(){return <GenericList kind="customers" load={getCustomers} columns={['Name','Email','Phone','Joined']}>{items=>items.map(c=><tr key={c.id}><td>{c.name||'—'}</td><td>{c.email}</td><td>{c.phone||'—'}</td><td>{date(c.created_at)}</td></tr>)}</GenericList>}
 function Reviews(){return <GenericList kind="reviews" load={getReviews} columns={['Product','Customer','Rating','Review','Status','Date','']} >{(items,refresh)=>items.map(r=><tr key={r.id}><td>{r.product?.name||'—'}</td><td>{r.customer?.name||r.customer?.email||'—'}</td><td>{r.rating}/5</td><td>{r.review||'—'}</td><td><Status>{r.status}</Status></td><td>{date(r.created_at)}</td><td>{r.status==='pending'&&<><Button className="quiet" onClick={async()=>{await approveReview(r.id);refresh()}}>Approve</Button><Button className="danger" onClick={async()=>{await rejectReview(r.id);refresh()}}>Reject</Button></>}</td></tr>)}</GenericList>}
 function Categories(){const [open,setOpen]=useState(false);const data=useData(getCategories);const [form,setForm]=useState({name:'',slug:'',description:'',status:true});const save=async()=>{try{await requireAdmin();const client=requireSupabase();const {error}=await client.from('categories').insert(form);if(error)throw error;setOpen(false);data.refresh()}catch(e){alert(e.message)}};if(data.loading)return <State type="loading" title="Loading categories"/>;if(data.error)return <State type="error" title="Categories are unavailable">{data.error}</State>;return <><div className="page-tools"><Button onClick={()=>setOpen(true)}>Create category</Button></div>{data.data?.length?<Table headers={['Name','Slug','Products','Status','Created']}>{data.data.map(c=><tr key={c.id}><td>{c.name}</td><td>{c.slug}</td><td>{c.product_categories?.[0]?.count||0}</td><td><Status>{c.status?'Active':'Archived'}</Status></td><td>{date(c.created_at)}</td></tr>)}</Table>:<State title="No categories yet"/>}{open&&<Modal close={()=>setOpen(false)}><p className="admin-kicker">Catalogue</p><h2>Create category</h2><div className="admin-form"><label>Name<input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value,slug:e.target.value.toLowerCase().replace(/[^a-z0-9]+/g,'-')}))}/></label><label>Slug<input value={form.slug} onChange={e=>setForm(f=>({...f,slug:e.target.value}))}/></label><label>Description<textarea value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/></label><Button onClick={save}>Create category</Button></div></Modal>}</>}
-// The customer-personalization bucket is private, so each photo's usable URL is generated
-// on demand (not stored/rendered as a plain <img src>) via a signed URL scoped to the
-// signed-in admin's own session. "View photo" opens a tab synchronously (before the async
-// signed-url call resolves) so browsers don't treat it as a blocked popup; "Download" fetches
-// the original bytes as a blob so the browser force-downloads the unmodified file instead of
-// just navigating to it (required for a cross-origin Storage URL).
+// Two storage backends can appear here: newer photos have cloudinary_public_id/original_url
+// (uploaded to Cloudinary — see server/cloudinary.js) and are shown/downloaded directly, since
+// Cloudinary's secure_url is already a stable, permanent link; older photos (uploaded before
+// the Cloudinary switch) only have storage_path against the private Supabase
+// customer-personalization bucket and still need a signed URL generated on demand, scoped to
+// the signed-in admin's own session.
+function cloudinaryVariant(url,transformation){return url&&url.includes('/upload/')?url.replace('/upload/',`/upload/${transformation}/`):url;}
 function PersonalizationPhotoLink({asset,index,total}){
   const [state,setState]=useState({loading:false,url:'',error:''});
+  const isCloudinary=Boolean(asset.cloudinary_public_id&&asset.original_url);
   const reveal=async()=>{
+    if(isCloudinary)return asset.original_url;
     if(state.url)return state.url;
     setState(s=>({...s,loading:true,error:''}));
     try{const url=await getPersonalizationSignedUrl(asset.storage_path);setState({loading:false,url,error:''});return url;}
@@ -124,6 +131,13 @@ function PersonalizationPhotoLink({asset,index,total}){
   };
   const view=async()=>{const win=window.open('','_blank','noopener');const url=await reveal();if(url&&win)win.location.href=url;else if(win)win.close();};
   const download=async()=>{
+    if(isCloudinary){
+      // fl_attachment makes Cloudinary set Content-Disposition on its own response, which
+      // forces a download of the ORIGINAL file (no resize/recompression) even cross-origin —
+      // no blob round-trip needed, unlike the private-bucket signed-URL case below.
+      window.open(cloudinaryVariant(asset.original_url,'fl_attachment'),'_blank','noopener');
+      return;
+    }
     const url=await reveal();
     if(!url)return;
     try{
@@ -137,10 +151,12 @@ function PersonalizationPhotoLink({asset,index,total}){
       setTimeout(()=>URL.revokeObjectURL(blobUrl),10000);
     }catch(err){setState(s=>({...s,error:'Download failed. Please try again.'}));}
   };
+  const thumb=isCloudinary?cloudinaryVariant(asset.original_url,'w_160,h_160,c_fill,q_auto'):null;
   return <span className="personalization-photo">
+    {thumb&&<img className="personalization-thumb" src={thumb} alt={asset.original_filename||`Photo ${index+1}`} loading="lazy"/>}
     <small>{total>1?`Photo ${index+1}`:asset.original_filename||'Photo'}</small>
     <Button className="quiet" type="button" onClick={view} disabled={state.loading}>{state.loading?'Loading…':'View photo'}</Button>
-    <Button className="quiet" type="button" onClick={download} disabled={state.loading}>Download</Button>
+    <Button className="quiet" type="button" onClick={download} disabled={state.loading}>Download original</Button>
     {state.error&&<small className="form-error">{state.error}</small>}
   </span>;
 }

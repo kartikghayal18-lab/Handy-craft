@@ -56,8 +56,13 @@ export default async function handler(req, res) {
       return;
     }
 
+    // order.email is the customer's real, checkout-validated email saved directly on the
+    // order (see server/razorpay.js finalizeSupabaseOrder) — it is preferred over
+    // customer.email, which can be a placeholder for orders whose customer record wasn't
+    // linked to a real email by the underlying database function. customer.email is only a
+    // fallback for orders placed before this column existed.
     const result = await sendOrderStatusUpdateEmail({
-      to: order.customer?.email,
+      to: order.email || order.customer?.email,
       customerName: order.customer?.name || order.shipping_name,
       orderNumber: order.order_number,
       status: order.order_status,

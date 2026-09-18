@@ -134,14 +134,18 @@ function statusLabel(status) {
 }
 
 // Sent once, right after a payment is verified and the order is actually created — never before.
-export async function sendOrderConfirmationEmail({ to, customerName, orderNumber }) {
+export async function sendOrderConfirmationEmail({ to, customerName, orderNumber, items, total, deliveryAddress, status }) {
+  const bodyLines = [
+    `Hi ${escapeHtml(customerName || 'there')},`,
+    `Thank you for your order. We've received your order <strong>#${escapeHtml(orderNumber)}</strong> and it's now being processed.`,
+  ];
+  if (deliveryAddress) bodyLines.push(`<strong>Delivery address:</strong><br/>${escapeHtml(deliveryAddress)}`);
+  bodyLines.push(`Current status: <strong>${escapeHtml(statusLabel(status || 'confirmed'))}</strong>`);
+  bodyLines.push(`You can track its status any time using the link below.`);
   const html = baseLayout({
     heading: `Order #${orderNumber} confirmed`,
-    bodyLines: [
-      `Hi ${escapeHtml(customerName || 'there')},`,
-      `Thank you for your order. We've received your order <strong>#${escapeHtml(orderNumber)}</strong> and it's now being processed.`,
-      `You can track its status any time using the link below.`,
-    ],
+    bodyLines,
+    summaryHtml: orderSummaryBlock({ items, total }),
     ctaLabel: 'Track Your Order',
     ctaUrl: trackOrderUrl(),
   });

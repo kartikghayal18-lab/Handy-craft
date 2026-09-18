@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { uploadPersonalizationPhoto } from './cloudinary.js';
 
 const MAX_ITEMS = 50;
 const MAX_QUANTITY = 20;
@@ -245,7 +246,34 @@ export async function finalizeSupabaseOrder({ shipping, items, razorpayOrderId, 
     try { data = JSON.parse(text); } catch { data = null; }
     throw new CheckoutError(data?.message || 'The verified order could not be stored.', 500, 'ORDER_STORAGE_ERROR');
   }
-  return readJson(response, 'The verified order could not be stored.');
+  const order = await readJson(response, 'The verified order could not be stored.');
+
+  // finalize_razorpay_order is a Supabase RPC created directly in the database (it is not in
+  // this repo's migrations), so its own customer-linking logic is opaque from here — it may
+  // resolve a customer's email from something other than the checkout form (an auth email, a
+  // guest placeholder, etc). To guarantee the order this call just created always has the
+  // customer's REAL, validated checkout email available for status/notification emails later,
+  // it is written directly onto orders.email right here, straight from validated input — never
+  // a Razorpay-side or placeholder address. Best-effort: any failure here is logged but never
+  // fails checkout, since the order itself was already successfully created above.
+  if (order?.id && shipping?.email) {
+    try {
+      const patchResponse = await fetch(`${url}/rest/v1/orders?id=eq.${order.id}`, {
+        method: 'PATCH',
+        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ email: shipping.email }),
+      });
+      if (!patchResponse.ok) {
+        const detail = await patchResponse.text().catch(() => '');
+        console.error('[razorpay] could not save customer email on order', order.id, patchResponse.status, detail.slice(0, 300));
+      } else {
+        order.email = shipping.email;
+      }
+    } catch (error) {
+      console.error('[razorpay] could not save customer email on order', order.id, error?.message || error);
+    }
+  }
+  return order;
 }
 
 export function sendError(res, error) {
@@ -310,27 +338,35 @@ export async function resolveOrderItem({ orderId, productId }) {
 // Uploads the original file bytes untouched (no re-encoding/compression) to the existing
 // private customer-personalization bucket, then attaches a personalization_assets row —
 // the same table/bucket the rest of the app already reads from.
+// Uploads the original file bytes untouched to Cloudinary (no re-encoding/compression/resize),
+// then attaches a personalization_assets row with the permanent Cloudinary identifiers.
+// storage_path/public_url are still populated (set to the same values as cloudinary_public_id/
+// original_url) purely for backward compatibility with the column's NOT NULL constraint and
+// any code still reading the old column names — cloudinary_public_id/original_url are the
+// columns everything new should read.
 export async function storePersonalizationPhoto({ orderId, orderItemId, contentType, buffer, originalFilename }) {
   const extension = ALLOWED_IMAGE_TYPES[contentType];
   if (!extension) throw new CheckoutError('Photos must be JPG, PNG, or WEBP.', 400, 'INVALID_FILE_TYPE');
   if (!buffer.length || buffer.length > MAX_FILE_BYTES) {
     throw new CheckoutError(`Each photo must be under ${Math.round(MAX_FILE_BYTES / (1024 * 1024))}MB.`, 400, 'FILE_TOO_LARGE');
   }
+  const { publicId, secureUrl, bytes, format } = await uploadPersonalizationPhoto({ buffer, contentType, orderId, orderItemId });
+
   const { url, key } = supabaseConfig({ serviceRole: true });
-  const storagePath = `${orderId}/${orderItemId}/${crypto.randomUUID()}.${extension}`;
-  const uploadResponse = await fetch(`${url}/storage/v1/object/customer-personalization/${storagePath}`, {
-    method: 'POST',
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': contentType, 'x-upsert': 'false' },
-    body: buffer,
-  });
-  if (!uploadResponse.ok) {
-    await uploadResponse.text().catch(() => '');
-    throw new CheckoutError('The photo could not be stored.', 502, 'STORAGE_UPLOAD_FAILED');
-  }
   const insertResponse = await fetch(`${url}/rest/v1/personalization_assets`, {
     method: 'POST',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ order_id: orderId, order_item_id: orderItemId, storage_path: storagePath, original_filename: String(originalFilename || 'photo').slice(0, 255) }),
+    body: JSON.stringify({
+      order_id: orderId,
+      order_item_id: orderItemId,
+      storage_path: publicId,
+      public_url: secureUrl,
+      cloudinary_public_id: publicId,
+      original_url: secureUrl,
+      bytes: bytes ?? null,
+      format: format ?? extension,
+      original_filename: String(originalFilename || 'photo').slice(0, 255),
+    }),
   });
   const rows = await readJsonRows(insertResponse, 'The photo was uploaded but could not be attached to the order.');
   return rows?.[0];
