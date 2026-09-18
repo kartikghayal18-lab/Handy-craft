@@ -15,16 +15,20 @@ export async function updateShipping(id, shipping) { await requireAdmin(); const
 // Best-effort status-update email, called after updateOrderStatus() has already succeeded — a
 // failure here (network hiccup, email not configured, etc.) is only logged to the console and
 // never surfaces to the admin, since the status change itself has already been saved.
-export async function notifyOrderStatusUpdate(orderId) {
+export async function notifyOrderStatusUpdate(orderId, previousStatus) {
   try {
     const { data } = await requireSupabase().auth.getSession();
     const token = data?.session?.access_token;
     if (!token) return;
-    await fetch('/api/orders/notify-status', {
+    const response = await fetch('/api/orders/notify-status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ order_id: orderId }),
+      body: JSON.stringify({ order_id: orderId, previous_status: previousStatus }),
     });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      console.warn('Order status email could not be sent:', body?.error || response.status);
+    }
   } catch (error) {
     console.warn('Order status email could not be sent:', error);
   }

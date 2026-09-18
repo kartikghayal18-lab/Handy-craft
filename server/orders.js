@@ -61,7 +61,7 @@ export async function getOrderForNotification(orderId) {
   const { url, key } = supabaseServiceConfig();
   const headers = { apikey: key, Authorization: `Bearer ${key}` };
   const endpoint = new URL(`${url}/rest/v1/orders`);
-  endpoint.searchParams.set('select', 'id,order_number,order_status,payment_status,total,shipping_name,customer:customers(email,name)');
+  endpoint.searchParams.set('select', 'id,order_number,order_status,payment_status,total,shipping_name,tracking_number,tracking_url,customer:customers(email,name),order_items(product_name_snapshot,quantity,price_snapshot)');
   endpoint.searchParams.set('id', `eq.${orderId}`);
   const rows = await readJson(await fetch(endpoint, { headers }), 'Unable to look up this order.');
   return rows?.[0] || null;

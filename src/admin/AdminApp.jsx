@@ -74,7 +74,33 @@ function Products(){
 }
 
 function Orders(){const data=useData(getOrders),[filter,setFilter]=useState('all'),[selected,setSelected]=useState(null);if(data.loading)return <State type="loading" title="Loading orders"/>;if(data.error)return <State type="error" title="Orders are unavailable" action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;const list=(data.data||[]).filter(x=>filter==='all'||x.order_status===filter);return <><div className="page-tools"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option>{states.map(x=><option key={x}>{x}</option>)}</select></div>{list.length?<Table headers={['Order #','Customer','Items','Total','Payment','Status','Date','']}>{list.map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.payment_status}</Status></td><td><Status>{o.order_status}</Status></td><td>{date(o.created_at)}</td><td><Button className="quiet" onClick={()=>setSelected(o)}>View</Button></td></tr>)}</Table>:<State title="No orders yet">Paid customer orders will appear here.</State>}{selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}</>;}
-function OrderModal({order,close,refresh}){const [status,setStatus]=useState(order.order_status),[busy,setBusy]=useState(false),[error,setError]=useState('');const save=async()=>{if(status===order.order_status)return close();setBusy(true);try{await updateOrderStatus(order.id,status);notifyOrderStatusUpdate(order.id);refresh();close()}catch(e){setError(e.message)}finally{setBusy(false)}};return <Modal close={close}><p className="admin-kicker">{order.order_number}</p><h2>Order details</h2><div className="order-detail"><p><b>Customer</b>{order.customer?.name||order.shipping_name||'—'}<br/>{order.customer?.email||''}<br/>{order.shipping_phone?<a href={`tel:${order.shipping_phone.replace(/[^+\d]/g,'')}`}>{order.shipping_phone}</a>:'Not provided'}</p><p><b>Delivery</b>{order.shipping_name}<br/>{order.shipping_address}<br/>{order.shipping_city}</p><p><b>Items</b>{order.order_items?.map(i=><span key={i.id}>{i.product_name_snapshot} × {i.quantity} — {money(i.price_snapshot)}{i.customization_text&&` · ${i.customization_text}`}</span>)}</p><label>Order status<select value={status} onChange={e=>setStatus(e.target.value)}>{states.map(x=><option key={x}>{x}</option>)}</select></label>{error&&<p className="form-error">{error}</p>}<Button disabled={busy} onClick={save}>{busy?'Updating…':'Update status'}</Button></div></Modal>}
+function OrderModal({order,close,refresh}){
+  const [status,setStatus]=useState(order.order_status),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  // Only calls updateOrderStatus (and the notification) when the status actually changed —
+  // reopening/closing the modal without touching the dropdown never fires an update or email.
+  const save=async()=>{
+    if(status===order.order_status)return close();
+    setBusy(true);
+    try{
+      await updateOrderStatus(order.id,status);
+      // Best-effort, non-blocking: notifyOrderStatusUpdate never throws, so an email failure
+      // (missing provider, network blip) never stops the status change from being saved.
+      // previous_status is passed so the server can additionally guard against duplicate sends.
+      notifyOrderStatusUpdate(order.id,order.order_status);
+      refresh();close();
+    }catch(e){setError(e.message)}finally{setBusy(false)}
+  };
+  return <Modal close={close}><p className="admin-kicker">Order ID · {order.order_number}</p><h2>Order details</h2><div className="order-detail">
+    <p><b>Customer</b>{order.customer?.name||order.shipping_name||'—'}<br/>{order.customer?.email?<a href={`mailto:${order.customer.email}`}>{order.customer.email}</a>:'No email on file'}<br/>{order.shipping_phone?<a href={`tel:${order.shipping_phone.replace(/[^+\d]/g,'')}`}>{order.shipping_phone}</a>:'Not provided'}</p>
+    <p><b>Delivery address</b>{order.shipping_name}<br/>{order.shipping_address}<br/>{order.shipping_city}{order.shipping_city&&order.shipping_state?', ':''}{order.shipping_state}{order.shipping_postal_code?` – ${order.shipping_postal_code}`:''}</p>
+    <p><b>Items</b>{order.order_items?.map(i=><span key={i.id}>{i.product_name_snapshot} × {i.quantity} — {money(i.price_snapshot)}{i.customization_text&&` · ${i.customization_text}`}</span>)}</p>
+    <p><b>Order date</b>{date(order.created_at)}</p>
+    <p><b>Payment status</b><Status>{order.payment_status}</Status></p>
+    <p><b>Total amount</b>{money(order.total)}</p>
+    <label>Order status<select value={status} onChange={e=>setStatus(e.target.value)}>{states.map(x=><option key={x}>{x}</option>)}</select></label>
+    {error&&<p className="form-error">{error}</p>}
+    <Button disabled={busy} onClick={save}>{busy?'Updating…':'Update status'}</Button>
+  </div></Modal>}
 
 function GenericList({kind,load,columns,children}){const data=useData(load);if(data.loading)return <State type="loading" title={`Loading ${kind.toLowerCase()}`}/>;if(data.error)return <State type="error" title={`${kind} are unavailable`} action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;return data.data?.length?<Table headers={columns}>{children(data.data,data.refresh)}</Table>:<State title={`No ${kind.toLowerCase()} yet`}>Records will appear here when available.</State>}
 function Inventory(){const [adjust,setAdjust]=useState(null);return <><GenericList kind="inventory products" load={getInventory} columns={['Product','SKU','Stock','Threshold','Status','']} >{(items,refresh)=>items.map(p=><tr key={p.id}><td>{p.name}</td><td>{p.sku||'—'}</td><td>{p.stock_quantity}</td><td>{p.low_stock_threshold}</td><td><Status>{p.stock_quantity===0?'Out of stock':p.stock_quantity<=p.low_stock_threshold?'Low':'Healthy'}</Status></td><td><Button className="quiet" onClick={()=>setAdjust({p,refresh})}>Adjust</Button></td></tr>)}</GenericList>{adjust&&<InventoryModal {...adjust} close={()=>setAdjust(null)}/>}</>}

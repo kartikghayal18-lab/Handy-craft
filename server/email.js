@@ -20,7 +20,16 @@ function readOptionalEnv(name) {
 }
 
 export function isEmailConfigured() {
-  return Boolean(readOptionalEnv('RESEND_API_KEY') && readOptionalEnv('EMAIL_FROM'));
+  return Boolean(readOptionalEnv('RESEND_API_KEY') && readOptionalEnv('RESEND_FROM_EMAIL'));
+}
+
+// RESEND_FROM_EMAIL can be set either as a bare address ("orders@foreverhandy.store") or
+// already formatted with a display name ("Forever Handy <orders@foreverhandy.store>"). Either
+// way this always sends as "Forever Handy <...>", per the sender identity requested.
+function fromHeader() {
+  const value = readOptionalEnv('RESEND_FROM_EMAIL');
+  if (!value) return value;
+  return value.includes('<') ? value : `Forever Handy <${value}>`;
 }
 
 // Resolves the production site URL for tracking links. Prefers an explicit SITE_URL env var;
@@ -44,9 +53,27 @@ function trackOrderUrl() {
   return siteUrl ? `${siteUrl}/track-order` : '/track-order';
 }
 
-function baseLayout({ heading, bodyLines, ctaLabel, ctaUrl }) {
+// Renders the items/total block shared by both emails — the "order summary" the status-update
+// email is required to include. Skipped entirely when no items are available (never renders an
+// empty table).
+function orderSummaryBlock({ items, total }) {
+  if (!Array.isArray(items) || !items.length) return '';
+  const rows = items.map(item => `<tr>
+      <td style="padding:6px 0;color:#222;font-size:14px;">${escapeHtml(item.product_name_snapshot)} × ${escapeHtml(item.quantity)}</td>
+      <td style="padding:6px 0;color:#222;font-size:14px;text-align:right;">₹${escapeHtml(Number(item.price_snapshot * item.quantity).toLocaleString('en-IN'))}</td>
+    </tr>`).join('');
+  const totalRow = total != null
+    ? `<tr><td style="padding:10px 0 0;font-size:14px;font-weight:bold;border-top:1px solid #eee;">Total</td><td style="padding:10px 0 0;font-size:14px;font-weight:bold;text-align:right;border-top:1px solid #eee;">₹${escapeHtml(Number(total).toLocaleString('en-IN'))}</td></tr>`
+    : '';
+  return `<table style="width:100%;border-collapse:collapse;margin:8px 0 0;">${rows}${totalRow}</table>`;
+}
+
+function baseLayout({ heading, bodyLines, summaryHtml, ctaLabel, ctaUrl, trackingNumber }) {
   const ctaBlock = ctaUrl
     ? `<p style="margin:28px 0 0;"><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;">${escapeHtml(ctaLabel)}</a></p>`
+    : '';
+  const trackingBlock = trackingNumber
+    ? `<p style="margin:12px 0 0;color:#222;font-size:14px;">Tracking number: <strong>${escapeHtml(trackingNumber)}</strong></p>`
     : '';
   const paragraphs = bodyLines.map(line => `<p style="margin:0 0 12px;color:#222;font-size:15px;line-height:1.5;">${line}</p>`).join('');
   return `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;">
@@ -54,6 +81,8 @@ function baseLayout({ heading, bodyLines, ctaLabel, ctaUrl }) {
       <p style="margin:0 0 20px;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#8a7f6f;">Forever Handy</p>
       <h1 style="margin:0 0 16px;font-size:20px;color:#111;">${escapeHtml(heading)}</h1>
       ${paragraphs}
+      ${summaryHtml || ''}
+      ${trackingBlock}
       ${ctaBlock}
       <p style="margin:28px 0 0;color:#8a7f6f;font-size:13px;">Thank you,<br/>Forever Handy</p>
     </div>
@@ -62,7 +91,7 @@ function baseLayout({ heading, bodyLines, ctaLabel, ctaUrl }) {
 
 async function sendEmail({ to, subject, html }) {
   if (!isEmailConfigured()) {
-    console.warn('[email] skipped — RESEND_API_KEY/EMAIL_FROM not configured:', subject);
+    console.warn('[email] skipped — RESEND_API_KEY/RESEND_FROM_EMAIL not configured:', subject);
     return { sent: false, reason: 'NOT_CONFIGURED' };
   }
   if (!to) {
@@ -71,7 +100,7 @@ async function sendEmail({ to, subject, html }) {
   }
   try {
     const apiKey = requireServerEnv('RESEND_API_KEY');
-    const from = requireServerEnv('EMAIL_FROM');
+    const from = fromHeader();
     const response = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -120,8 +149,9 @@ export async function sendOrderConfirmationEmail({ to, customerName, orderNumber
 }
 
 // Sent when an admin changes an order's status from the existing Orders page — layered after
-// the existing status-update call, never in place of it.
-export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber, status }) {
+// the existing status-update call, never in place of it. Includes the order summary (items +
+// total) and tracking info when available, per the required email content.
+export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber, status, total, items, trackingNumber, trackingUrl }) {
   const label = statusLabel(status);
   const html = baseLayout({
     heading: `Order #${orderNumber} is now ${label}`,
@@ -130,8 +160,10 @@ export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber
       `Your order <strong>#${escapeHtml(orderNumber)}</strong> has been updated.`,
       `Current status: <strong>${escapeHtml(label)}</strong>`,
     ],
+    summaryHtml: orderSummaryBlock({ items, total }),
+    trackingNumber,
     ctaLabel: 'Track Your Order',
-    ctaUrl: trackOrderUrl(),
+    ctaUrl: trackingUrl || trackOrderUrl(),
   });
   return sendEmail({ to, subject: `Your Forever Handy order #${orderNumber} is now ${label}`, html });
 }

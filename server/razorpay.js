@@ -91,7 +91,10 @@ export function normalizeShipping(shipping) {
     throw new CheckoutError('Complete delivery details are required.');
   }
   if (!/^\d{6}$/.test(normalized.postal_code)) throw new CheckoutError('Enter a valid 6-digit postal code.');
-  if (normalized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) {
+  // Email is compulsory (order-confirmation and status-update notifications depend on it) —
+  // validated the same way phone/address/etc. are, as a required field rather than optional.
+  if (!normalized.email) throw new CheckoutError('Email address is required.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) {
     throw new CheckoutError('Enter a valid email address.');
   }
   return normalized;
