@@ -161,96 +161,6 @@ function CategoryPage({ products, catalogState, retry, count, favourites, onFavo
   </div>;
 }
 
-// Real order_status progression, taken from the same enum the admin dashboard's status
-// dropdown uses (src/admin/AdminApp.jsx's `states`) — never invented labels like "Out for
-// delivery" that don't exist in the schema. cancelled/refunded are handled separately, not as
-// timeline steps, since they don't sit on the pending→delivered path.
-const TRACK_STATUS_STEPS = ['pending', 'confirmed', 'preparing', 'ready', 'shipped', 'delivered'];
-const TRACK_STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', preparing: 'Preparing', ready: 'Ready', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded' };
-
-function OrderStatusTimeline({ status }) {
-  if (status === 'cancelled') return <div className="track-status-banner track-status-cancelled"><Icon name="close" size={18}/><div><strong>Order cancelled</strong><p>This order was cancelled and is not being processed.</p></div></div>;
-  if (status === 'refunded') return <div className="track-status-banner track-status-refunded"><Icon name="close" size={18}/><div><strong>Order refunded</strong><p>This order has been refunded.</p></div></div>;
-  const currentIndex = Math.max(0, TRACK_STATUS_STEPS.indexOf(status));
-  return <ol className="track-timeline" aria-label="Order status timeline">{TRACK_STATUS_STEPS.map((step, index) => <li key={step} className={index <= currentIndex ? 'is-done' : ''} aria-current={index === currentIndex ? 'step' : undefined}><span className="track-timeline-dot"/><span className="track-timeline-label">{TRACK_STATUS_LABELS[step]}</span></li>)}</ol>;
-}
-
-// Reads ?orderId=...&phone=... from the URL (the email's tracking-link CTA sends these) and
-// strips a leading "#" client-side too — belt-and-suspenders alongside the backend's own
-// normalizeOrderNumber(), since a customer can also land here with a hand-typed or bookmarked
-// URL the backend has never seen. This only prefills the form; the backend still normalizes
-// and validates both values again on submit, exactly as before.
-function trackOrderParamsFromUrl() {
-  const params = new URLSearchParams(location.search);
-  const orderId = (params.get('orderId') || '').trim().replace(/^#+/, '');
-  const phone = (params.get('phone') || '').trim();
-  return { orderId, phone };
-}
-
-function TrackOrderPage() {
-  const [form, setForm] = useState(trackOrderParamsFromUrl);
-  const [state, setState] = useState('form'); // 'form' | 'loading' | 'error' | 'result'
-  const [error, setError] = useState('');
-  const [order, setOrder] = useState(null);
-  const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
-
-  const submit = async event => {
-    event.preventDefault();
-    setError('');
-    if (!form.orderId.trim() || !form.phone.trim()) { setError('Please enter both your Order ID and mobile number.'); return; }
-    setState('loading');
-    try {
-      const params = new URLSearchParams({ orderId: form.orderId.trim(), phone: form.phone.trim() });
-      const response = await fetch(`/api/orders/track?${params.toString()}`);
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.order) {
-        setError(data?.error || 'Order not found. Please check your details.');
-        setState('error');
-        return;
-      }
-      setOrder(data.order);
-      setState('result');
-    } catch (err) {
-      console.error('[track-order] lookup failed', err);
-      setError('Something went wrong. Please try again.');
-      setState('error');
-    }
-  };
-
-  const trackAnother = () => { setOrder(null); setForm({ orderId: '', phone: '' }); setState('form'); setError(''); };
-
-  return <div className="category-page track-order-page">
-    <header className="category-header"><BrandLogo href="/"/></header>
-    <main className="track-order-main">
-      <section className="track-order-hero"><p className="eyebrow">Order tracking</p><h1>Track your order</h1><p className="lede">Enter your Order ID and the mobile number used at checkout to see your order's current status.</p></section>
-
-      {state !== 'result' && <form className="checkout-form track-order-form" onSubmit={submit}>
-        <label className="text-field checkout-wide"><span>Order ID</span><input required placeholder="MK-XXXXXXXXXX" value={form.orderId} onChange={e=>set('orderId', e.target.value)} autoCapitalize="characters"/></label>
-        <label className="text-field checkout-wide"><span>Mobile number</span><input required inputMode="tel" placeholder="Used at checkout" value={form.phone} onChange={e=>set('phone', e.target.value)}/></label>
-        {state === 'error' && <div className="checkout-warning checkout-wide" role="alert"><strong>Order not found</strong><p>{error}</p></div>}
-        <button className="primary full checkout-wide" disabled={state === 'loading'}>{state === 'loading' ? 'Looking up your order…' : 'Track order'} <Icon name="arrow"/></button>
-      </form>}
-
-      {state === 'result' && order && <div className="track-order-result">
-        <div className="track-order-summary"><p className="eyebrow">Order</p><h2>#{order.order_number}</h2><small>{order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</small></div>
-
-        <OrderStatusTimeline status={order.order_status}/>
-
-        {order.payment_status === 'failed' && <div className="checkout-warning checkout-wide" role="alert"><strong>Payment not completed</strong><p>Payment for this order was not successful.</p></div>}
-
-        <div className="track-order-details">
-          <div><b>Customer</b><p>{order.customer_name || '—'}</p></div>
-          <div><b>Delivery address</b><p>{order.delivery_address?.address}<br/>{order.delivery_address?.city}, {order.delivery_address?.state} {order.delivery_address?.postal_code}</p></div>
-          <div><b>Items</b>{(order.items || []).map((item, index) => <p key={index}>{item.product_name} × {item.quantity} — {rupee(item.price)}</p>)}</div>
-          <div><b>Total</b><p>{rupee(order.total)}</p></div>
-        </div>
-
-        <button type="button" className="text-link checkout-wide" onClick={trackAnother}>Track another order</button>
-      </div>}
-    </main>
-  </div>;
-}
-
 const marqueeItems = ['Handcrafted with love', 'Ships across India', 'Free personalization', 'Made to order, never mass produced'];
 function Marquee() { return <div className="mk-marquee" aria-hidden="true"><div className="mk-marquee-track">{[...marqueeItems, ...marqueeItems].map((item, index) => <span key={index}>{item}</span>)}</div></div>; }
 function TrustStrip() { return <div className="trust-strip"><div><Icon name="heart" size={16}/><span>Handmade to order — <b>not mass produced</b></span></div><div><Icon name="bag" size={16}/><span>Ships <b>across India</b></span></div><div><Icon name="plus" size={16}/><span><b>Free</b> personalization on every gift</span></div><div><Icon name="compass" size={16}/><span>Packed with care, <b>ready to gift</b></span></div></div>; }
@@ -433,7 +343,6 @@ function App() {
   useEffect(() => { const openAdminLogin = event => { if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'o') { event.preventDefault(); location.assign('/admin/login'); } }; window.addEventListener('keydown', openAdminLogin); return () => window.removeEventListener('keydown', openAdminLogin); }, []);
   const selectOccasion = occasion => { setSelectedOccasion(occasion); window.setTimeout(goProducts, 220); };
   if (location.pathname === '/categories') return <><CategoryPage products={catalogProducts} catalogState={catalogState} retry={loadCatalog} count={count} favourites={favourites} onFavourite={id=>setFavourites(items=>items.includes(id)?items.filter(item=>item!==id):[...items,id])} onView={setSelected} onAdd={add} onCart={()=>setDrawer(true)}/>{cartNotice&&<CartSuccess notice={cartNotice} close={()=>setCartNotice(null)} viewCart={()=>{setCartNotice(null);setDrawer(true)}}/>}{selected && <ProductModal product={selected} close={() => setSelected(null)} add={(customization,quantity) => { add(selected, customization, quantity); setSelected(null); }}/>} {drawer && <CartDrawer cart={cart} total={total} close={() => setDrawer(false)} checkout={()=>{setDrawer(false);setCheckout(true)}} remove={remove} changeQuantity={changeQuantity}/>} {checkout && <Checkout cart={cart} close={()=>setCheckout(false)} complete={()=>{setCart([]);setCheckout(false)}}/>}</>;
-  if (location.pathname === '/track-order') return <TrackOrderPage/>;
   const goSection = id => () => document.getElementById(id)?.scrollIntoView({behavior:'smooth'});
   return <><ScrollProgress/><Marquee/><header className={`topbar ${scrolled ? 'is-scrolled' : ''}`}><BrandLogo/><nav><button onClick={goProducts}>Gifts</button><button onClick={goSection('discover')}>Shop by Person</button><button onClick={goSection('occasions')}>Occasions</button><button onClick={goSection('story')}>Our story</button></nav><div className="header-actions"><button aria-label="Search gifts" onClick={goProducts}><Icon name="search"/></button><button aria-label="View wishlist" onClick={showMobileWishlist}><Icon name="heart"/></button><button className={`bag ${bagBump ? 'bump' : ''}`} aria-label="Open cart" onClick={() => setDrawer(true)}><Icon name="bag"/><span>{count}</span></button></div></header>
   <header className={`mobile-store-header ${scrolled ? 'is-scrolled' : ''}`}><div className="mobile-header-bar"><button aria-label="Open shop menu" aria-expanded={mobileMenuOpen} onClick={()=>setMobileMenuOpen(open=>!open)}><Icon name="menu"/></button><BrandLogo/><div><button aria-label="View wishlist" onClick={showMobileWishlist}><Icon name="heart"/></button><button className={`bag ${bagBump ? 'bump' : ''}`} aria-label="Open cart" onClick={() => setDrawer(true)}><Icon name="bag"/><span>{count}</span></button></div></div><div className="mobile-search"><Icon name="search" size={18}/><input value={mobileSearch} onChange={event=>{setWishlistOnly(false);setMobileSearch(event.target.value)}} placeholder="Search gifts, photos, frames…" aria-label="Search gifts"/>{mobileSearch&&<button aria-label="Clear search" onClick={()=>setMobileSearch('')}><Icon name="close" size={16}/></button>}</div><nav className="mobile-category-nav" aria-label="Shop categories">{mobileCategoryItems.map((name,index)=>{const match=catalogProducts.find(product=>product.categories?.includes(name));return <a href={`/categories?category=${encodeURIComponent(name)}`} key={name}><img src={match?.image || (index % 2 ? '/images/memory-kraft-collection.png' : '/images/memory-kraft-hero.png')} alt=""/><span>{name}</span></a>})}</nav>{mobileMenuOpen&&<nav className="mobile-menu-panel" aria-label="Shop menu"><a href="/categories">Shop all gifts</a><button onClick={()=>{setMobileMenuOpen(false);goProducts();}}>Best sellers</button><button onClick={()=>{setMobileMenuOpen(false);document.getElementById('occasions')?.scrollIntoView({behavior:'smooth'});}}>Occasions</button><button onClick={()=>{setMobileMenuOpen(false);document.getElementById('discover')?.scrollIntoView({behavior:'smooth'});}}>Shop by person</button><button onClick={()=>{setMobileMenuOpen(false);document.getElementById('story').scrollIntoView({behavior:'smooth'});}}>Our story</button></nav>}</header>

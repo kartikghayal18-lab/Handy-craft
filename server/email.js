@@ -1,5 +1,4 @@
 import { requireServerEnv } from './razorpay.js';
-import { normalizeOrderNumber, normalizePhone } from './orders.js';
 
 // Order-update emails (confirmation + status change). No SMS, per product decision — email only.
 // No email provider existed in this codebase before this file (grepped for RESEND/SENDGRID/etc,
@@ -33,37 +32,8 @@ function fromHeader() {
   return value.includes('<') ? value : `Forever Handy <${value}>`;
 }
 
-// Resolves the production site URL for tracking links. Prefers an explicit SITE_URL env var;
-// falls back to Vercel's own auto-populated VERCEL_URL (which has no protocol, so https:// is
-// prefixed); never falls back to localhost, so a misconfigured production deploy fails loud
-// (missing link text) rather than silently emailing an unusable localhost link.
-export function getSiteUrl() {
-  const explicit = readOptionalEnv('SITE_URL');
-  if (explicit) return explicit.replace(/\/$/, '');
-  const vercelUrl = readOptionalEnv('VERCEL_URL');
-  if (vercelUrl) return `https://${vercelUrl}`;
-  return '';
-}
-
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-}
-
-// Builds the tracking link with the canonical, already-normalized order id + phone as query
-// params, so a customer who clicks the button never has to type anything: the tracking page
-// reads these and prefills the form. Uses the exact same normalizeOrderNumber/normalizePhone
-// functions the tracking API itself uses to validate a submission, so the value embedded here
-// can never drift from what the backend actually expects — no leading "#", no formatting
-// differences. Falls back to the bare, param-less link when either value is missing (e.g. an
-// order with no phone on file), rather than emitting a broken query string.
-function trackOrderUrl({ orderNumber, phone } = {}) {
-  const siteUrl = getSiteUrl();
-  const base = siteUrl ? `${siteUrl}/track-order` : '/track-order';
-  const cleanOrderNumber = normalizeOrderNumber(orderNumber);
-  const cleanPhone = normalizePhone(phone);
-  if (!cleanOrderNumber || cleanPhone.length !== 10) return base;
-  const params = new URLSearchParams({ orderId: cleanOrderNumber, phone: cleanPhone });
-  return `${base}?${params.toString()}`;
 }
 
 // Renders the items/total block shared by both emails — the "order summary" the status-update
@@ -81,13 +51,10 @@ function orderSummaryBlock({ items, total }) {
   return `<table style="width:100%;border-collapse:collapse;margin:8px 0 0;">${rows}${totalRow}</table>`;
 }
 
-function baseLayout({ heading, bodyLines, summaryHtml, ctaLabel, ctaUrl, trackingNumber }) {
-  const ctaBlock = ctaUrl
-    ? `<p style="margin:28px 0 0;"><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;">${escapeHtml(ctaLabel)}</a></p>`
-    : '';
-  const trackingBlock = trackingNumber
-    ? `<p style="margin:12px 0 0;color:#222;font-size:14px;">Tracking number: <strong>${escapeHtml(trackingNumber)}</strong></p>`
-    : '';
+// Customer-facing order tracking (the /track-order page and its API) was removed at the
+// customer's request, so these emails no longer contain any CTA button or tracking link —
+// just the Forever Handy branding, the message body, and the order summary.
+function baseLayout({ heading, bodyLines, summaryHtml }) {
   const paragraphs = bodyLines.map(line => `<p style="margin:0 0 12px;color:#222;font-size:15px;line-height:1.5;">${line}</p>`).join('');
   return `<!doctype html><html><body style="margin:0;padding:32px 16px;background:#f7f5f2;font-family:Arial,Helvetica,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:10px;padding:28px 24px;">
@@ -95,8 +62,6 @@ function baseLayout({ heading, bodyLines, summaryHtml, ctaLabel, ctaUrl, trackin
       <h1 style="margin:0 0 16px;font-size:20px;color:#111;">${escapeHtml(heading)}</h1>
       ${paragraphs}
       ${summaryHtml || ''}
-      ${trackingBlock}
-      ${ctaBlock}
       <p style="margin:28px 0 0;color:#8a7f6f;font-size:13px;">Thank you,<br/>Forever Handy</p>
     </div>
   </body></html>`;
@@ -131,13 +96,20 @@ async function sendEmail({ to, subject, html }) {
   }
 }
 
+// Display labels shown to the customer. The underlying `orders.order_status` enum in Supabase
+// only has pending/confirmed/preparing/ready/shipped/delivered/cancelled/refunded — per the
+// admin's requested workflow (Pending → Confirmed → Processing → Shipped → Completed, with
+// Cancelled as a separate terminal state), "Processing" is displayed for the existing
+// `preparing` value and "Completed" is displayed for the existing `delivered` value, rather
+// than changing the database enum. `ready`/`refunded` are kept for any existing orders already
+// in those states but are no longer part of the admin's status dropdown going forward.
 const STATUS_LABELS = {
   pending: 'Pending',
   confirmed: 'Confirmed',
-  preparing: 'Preparing',
+  preparing: 'Processing',
   ready: 'Ready',
   shipped: 'Shipped',
-  delivered: 'Delivered',
+  delivered: 'Completed',
   cancelled: 'Cancelled',
   refunded: 'Refunded',
 };
@@ -146,44 +118,51 @@ function statusLabel(status) {
   return STATUS_LABELS[status] || status;
 }
 
+// The exact customer-facing message per status, as specified. Falls back to a generic
+// "status has been updated" line for ready/refunded (no longer reachable from the admin
+// dropdown, but a row could already be in one of these states from before).
+function statusMessage(status, orderNumber) {
+  const id = escapeHtml(orderNumber);
+  switch (status) {
+    case 'confirmed': return `Your Forever Handy order #${id} has been confirmed.`;
+    case 'preparing': return `Your order #${id} is now being processed.`;
+    case 'shipped': return `Your order #${id} has been shipped.`;
+    case 'delivered': return `Your order #${id} has been completed.`;
+    case 'cancelled': return `Your order #${id} has been cancelled.`;
+    default: return `Your order #${id} status has been updated to ${escapeHtml(statusLabel(status))}.`;
+  }
+}
+
 // Sent once, right after a payment is verified and the order is actually created — never before.
-export async function sendOrderConfirmationEmail({ to, customerName, orderNumber, items, total, deliveryAddress, status, phone }) {
+export async function sendOrderConfirmationEmail({ to, customerName, orderNumber, items, total, deliveryAddress, status }) {
   const bodyLines = [
     `Hi ${escapeHtml(customerName || 'there')},`,
     `Thank you for your order. We've received your order <strong>#${escapeHtml(orderNumber)}</strong> and it's now being processed.`,
   ];
   if (deliveryAddress) bodyLines.push(`<strong>Delivery address:</strong><br/>${escapeHtml(deliveryAddress)}`);
   bodyLines.push(`Current status: <strong>${escapeHtml(statusLabel(status || 'confirmed'))}</strong>`);
-  bodyLines.push(`You can track its status any time using the link below.`);
   const html = baseLayout({
     heading: `Order #${orderNumber} confirmed`,
     bodyLines,
     summaryHtml: orderSummaryBlock({ items, total }),
-    ctaLabel: 'Track Your Order',
-    ctaUrl: trackOrderUrl({ orderNumber, phone }),
   });
   return sendEmail({ to, subject: `Your Forever Handy order #${orderNumber} is confirmed`, html });
 }
 
-// Sent when an admin changes an order's status from the existing Orders page — layered after
-// the existing status-update call, never in place of it. Includes the order summary (items +
-// total) and tracking info when available, per the required email content.
-export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber, status, total, items, trackingNumber, trackingUrl, phone }) {
+// Sent whenever an admin changes an order's status from the Orders page (see
+// api/orders/notify-status.js) — layered after the existing status-update call, never in place
+// of it, and only when the status has actually changed (that de-dupe lives in the caller).
+// Includes the order summary (items + total) and the exact required message per status. Never
+// contains a tracking link or CTA — that surface was removed entirely.
+export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber, status, total, items }) {
   const label = statusLabel(status);
   const html = baseLayout({
     heading: `Order #${orderNumber} is now ${label}`,
     bodyLines: [
       `Hi ${escapeHtml(customerName || 'there')},`,
-      `Your order <strong>#${escapeHtml(orderNumber)}</strong> has been updated.`,
-      `Current status: <strong>${escapeHtml(label)}</strong>`,
+      statusMessage(status, orderNumber),
     ],
     summaryHtml: orderSummaryBlock({ items, total }),
-    trackingNumber,
-    ctaLabel: 'Track Your Order',
-    // trackingUrl, when set, is an external carrier/shipping tracking link (order.tracking_url)
-    // — takes priority when present. Otherwise this always links our own /track-order page
-    // with the order id + phone pre-filled via trackOrderUrl().
-    ctaUrl: trackingUrl || trackOrderUrl({ orderNumber, phone }),
   });
   return sendEmail({ to, subject: `Your Forever Handy order #${orderNumber} is now ${label}`, html });
 }

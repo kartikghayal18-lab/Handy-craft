@@ -68,9 +68,6 @@ export default async function handler(req, res) {
       status: order.order_status,
       total: order.total,
       items: order.order_items,
-      trackingNumber: order.tracking_number,
-      trackingUrl: order.tracking_url,
-      phone: order.shipping_phone,
     });
     // sendOrderStatusUpdateEmail never throws — result.sent is false (with a reason) whenever
     // the provider isn't configured, there's no email on file, or the send failed. Any failure

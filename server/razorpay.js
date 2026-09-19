@@ -335,22 +335,29 @@ export async function resolveOrderItem({ orderId, productId }) {
   return item.id;
 }
 
-// Uploads the original file bytes untouched (no re-encoding/compression) to the existing
-// private customer-personalization bucket, then attaches a personalization_assets row —
-// the same table/bucket the rest of the app already reads from.
 // Uploads the original file bytes untouched to Cloudinary (no re-encoding/compression/resize),
-// then attaches a personalization_assets row with the permanent Cloudinary identifiers.
-// storage_path/public_url are still populated (set to the same values as cloudinary_public_id/
-// original_url) purely for backward compatibility with the column's NOT NULL constraint and
-// any code still reading the old column names — cloudinary_public_id/original_url are the
-// columns everything new should read.
+// then attaches a personalization_assets row.
+//
+// ROOT CAUSE (confirmed against the live table's actual columns, which are only: id, order_id,
+// order_item_id, storage_path, public_url, original_filename, created_at): this insert used to
+// also send cloudinary_public_id/original_url/bytes/format. Those columns were added by
+// supabase/migrations/202609181300_personalization_cloudinary_and_order_email.sql, but that
+// migration was never actually run on the live database — so PostgREST rejected every insert
+// with "column personalization_assets.cloudinary_public_id does not exist", the insert failed
+// BEFORE a row was ever written, and Admin > Orders correctly (if confusingly) showed "No photo
+// uploaded" — there was never a row to show. Cloudinary's own upload above still succeeded,
+// which is why this looked like a display bug rather than a failed insert.
+//
+// Fix: only write the columns that actually exist on the table. storage_path (NOT NULL) holds
+// the Cloudinary public id; public_url holds Cloudinary's permanent secure_url — this is what
+// the admin UI now renders directly (see PersonalizationPhotoLink in src/admin/AdminApp.jsx).
 export async function storePersonalizationPhoto({ orderId, orderItemId, contentType, buffer, originalFilename }) {
   const extension = ALLOWED_IMAGE_TYPES[contentType];
   if (!extension) throw new CheckoutError('Photos must be JPG, PNG, or WEBP.', 400, 'INVALID_FILE_TYPE');
   if (!buffer.length || buffer.length > MAX_FILE_BYTES) {
     throw new CheckoutError(`Each photo must be under ${Math.round(MAX_FILE_BYTES / (1024 * 1024))}MB.`, 400, 'FILE_TOO_LARGE');
   }
-  const { publicId, secureUrl, bytes, format } = await uploadPersonalizationPhoto({ buffer, contentType, orderId, orderItemId });
+  const { publicId, secureUrl } = await uploadPersonalizationPhoto({ buffer, contentType, orderId, orderItemId });
 
   const { url, key } = supabaseConfig({ serviceRole: true });
   const insertResponse = await fetch(`${url}/rest/v1/personalization_assets`, {
@@ -361,10 +368,6 @@ export async function storePersonalizationPhoto({ orderId, orderItemId, contentT
       order_item_id: orderItemId,
       storage_path: publicId,
       public_url: secureUrl,
-      cloudinary_public_id: publicId,
-      original_url: secureUrl,
-      bytes: bytes ?? null,
-      format: format ?? extension,
       original_filename: String(originalFilename || 'photo').slice(0, 255),
     }),
   });

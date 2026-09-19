@@ -14,7 +14,34 @@ const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', curre
 const date = value => value ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(value)) : '—';
 const nav = [['/admin','Overview'],['/admin/orders','Orders'],['/admin/products','Products'],['/admin/categories','Categories'],['/admin/customers','Customers'],['/admin/inventory','Inventory'],['/admin/personalization','Personalization'],['/admin/reviews','Reviews'],['/admin/coupons','Coupons']];
 const titles = Object.fromEntries([...nav, ['/admin/settings','Settings']]);
-const states = ['pending','confirmed','preparing','ready','shipped','delivered','cancelled','refunded'];
+// Admin's requested order workflow — Pending → Confirmed → Processing → Shipped → Completed,
+// with Cancelled as a separate terminal state the admin can move an order to at any point —
+// mapped onto the EXISTING orders.order_status Postgres enum (pending, confirmed, preparing,
+// ready, shipped, delivered, cancelled, refunded), rather than changing the database. Every
+// value the dropdown offers is a real, already-valid enum value:
+//   Processing is stored as the existing 'preparing' value.
+//   Completed  is stored as the existing 'delivered' value.
+// 'ready' and 'refunded' are legacy enum values not offered here going forward; an order
+// already in one of those states is still shown (grouped as Active / Cancelled respectively,
+// see ORDER_GROUPS below) rather than hidden or broken.
+const STATUS_OPTIONS = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'preparing', label: 'Processing' },
+  { value: 'shipped', label: 'Shipped' },
+  { value: 'delivered', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, o.label]));
+STATUS_LABELS.ready = 'Ready';
+STATUS_LABELS.refunded = 'Refunded';
+const statusLabel = value => STATUS_LABELS[value] || value;
+// Admin > Orders grouping (section 5): filtering/grouping of the same orders records, not a
+// duplicate list. 'ready' (legacy, "ready to ship") is grouped with Active; 'refunded' (legacy)
+// is grouped with Cancelled, since both are terminal/negative outcomes.
+const ACTIVE_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'shipped'];
+const COMPLETED_STATUSES = ['delivered'];
+const CANCELLED_STATUSES = ['cancelled', 'refunded'];
 
 function useRoute() { const [path,setPath] = useState(location.pathname); useEffect(() => { const update=()=>setPath(location.pathname); addEventListener('popstate',update); return()=>removeEventListener('popstate',update); },[]); const go=to=>{ history.pushState({},'',to); setPath(to); }; return [path,go]; }
 function Button({children, className='', ...props}) { return <button className={`admin-button ${className}`} {...props}>{children}</button>; }
@@ -30,7 +57,7 @@ function AppShell({path,go,user,children}) { const [open,setOpen]=useState(false
 function useData(load, deps=[]) { const [state,setState]=useState({loading:true,data:null,error:''}); const refresh=async()=>{setState(s=>({...s,loading:true,error:''}));try{setState({loading:false,data:await load(),error:''});}catch(err){setState({loading:false,data:null,error:'Unable to load this data right now. Please try again.'});}}; useEffect(()=>{refresh();},deps); return {...state,refresh}; }
 function Table({children,headers}) { return <div className="table-wrap"><table><thead><tr>{headers.map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{children}</tbody></table></div>; }
 
-function Overview({go}) { const orders=useData(getOrders), inventory=useData(getInventory); if(orders.loading||inventory.loading)return <State type="loading" title="Loading workshop overview"/>; if(orders.error||inventory.error)return <State type="error" title="The dashboard needs the remote migration" action={<Button onClick={()=>{orders.refresh();inventory.refresh();}}>Try again</Button>}>{orders.error||inventory.error}</State>; const all=orders.data||[], today=new Date().toDateString(), todayOrders=all.filter(o=>new Date(o.created_at).toDateString()===today), pending=all.filter(o=>o.order_status==='pending'), low=(inventory.data||[]).filter(p=>p.stock_quantity<=p.low_stock_threshold), revenue=all.filter(o=>o.payment_status==='paid').reduce((n,o)=>n+Number(o.total),0); return <><section className="metrics"><Metric label="Today's orders" value={todayOrders.length}/><Metric label="Pending orders" value={pending.length}/><Metric label="Revenue" value={money(revenue)}/><Metric label="Low stock" value={low.length}/></section><section className="panel"><div className="panel-head"><div><p className="admin-kicker">Latest work</p><h2>Recent orders</h2></div><Button className="quiet" onClick={()=>go('/admin/orders')}>View all orders</Button></div>{all.length?<Table headers={['Order #','Customer','Items','Amount','Status','Date']} >{all.slice(0,6).map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.order_status}</Status></td><td>{date(o.created_at)}</td></tr>)}</Table>:<State title="No orders yet">Orders from customers will appear here.</State>}</section><section className="two-panels"><section className="panel"><div className="panel-head"><h2>Low stock</h2><Button className="quiet" onClick={()=>go('/admin/inventory')}>Manage inventory</Button></div>{low.length?<Table headers={['Product','Stock','Status']}>{low.slice(0,5).map(p=><tr key={p.id}><td>{p.name}</td><td>{p.stock_quantity} / {p.low_stock_threshold}</td><td><Status>{p.stock_quantity===0?'Out of stock':'Low'}</Status></td></tr>)}</Table>:<State title="Stock looks healthy">Products needing attention will appear here.</State>}</section><section className="panel"><div className="panel-head"><h2>Quick actions</h2></div><div className="quick-actions"><Button onClick={()=>go('/admin/products')}>Add product</Button><Button className="quiet" onClick={()=>go('/admin/orders')}>View orders</Button><Button className="quiet" onClick={()=>go('/admin/personalization')}>Review personalization</Button></div></section></section></>; }
+function Overview({go}) { const orders=useData(getOrders), inventory=useData(getInventory); if(orders.loading||inventory.loading)return <State type="loading" title="Loading workshop overview"/>; if(orders.error||inventory.error)return <State type="error" title="The dashboard needs the remote migration" action={<Button onClick={()=>{orders.refresh();inventory.refresh();}}>Try again</Button>}>{orders.error||inventory.error}</State>; const all=orders.data||[], today=new Date().toDateString(), todayOrders=all.filter(o=>new Date(o.created_at).toDateString()===today), pending=all.filter(o=>o.order_status==='pending'), low=(inventory.data||[]).filter(p=>p.stock_quantity<=p.low_stock_threshold), revenue=all.filter(o=>o.payment_status==='paid').reduce((n,o)=>n+Number(o.total),0); return <><section className="metrics"><Metric label="Today's orders" value={todayOrders.length}/><Metric label="Pending orders" value={pending.length}/><Metric label="Revenue" value={money(revenue)}/><Metric label="Low stock" value={low.length}/></section><section className="panel"><div className="panel-head"><div><p className="admin-kicker">Latest work</p><h2>Recent orders</h2></div><Button className="quiet" onClick={()=>go('/admin/orders')}>View all orders</Button></div>{all.length?<Table headers={['Order #','Customer','Items','Amount','Status','Date']} >{all.slice(0,6).map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{statusLabel(o.order_status)}</Status></td><td>{date(o.created_at)}</td></tr>)}</Table>:<State title="No orders yet">Orders from customers will appear here.</State>}</section><section className="two-panels"><section className="panel"><div className="panel-head"><h2>Low stock</h2><Button className="quiet" onClick={()=>go('/admin/inventory')}>Manage inventory</Button></div>{low.length?<Table headers={['Product','Stock','Status']}>{low.slice(0,5).map(p=><tr key={p.id}><td>{p.name}</td><td>{p.stock_quantity} / {p.low_stock_threshold}</td><td><Status>{p.stock_quantity===0?'Out of stock':'Low'}</Status></td></tr>)}</Table>:<State title="Stock looks healthy">Products needing attention will appear here.</State>}</section><section className="panel"><div className="panel-head"><h2>Quick actions</h2></div><div className="quick-actions"><Button onClick={()=>go('/admin/products')}>Add product</Button><Button className="quiet" onClick={()=>go('/admin/orders')}>View orders</Button><Button className="quiet" onClick={()=>go('/admin/personalization')}>Review personalization</Button></div></section></section></>; }
 
 const productBlank={name:'',slug:'',description:'',short_description:'',price:'',sale_price:'',sku:'',stock_quantity:0,low_stock_threshold:0,status:'draft',personalizable:false,photo_upload_required:false,max_photos:0,custom_text_allowed:false,max_text_length:0};
 const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -73,7 +100,32 @@ function Products(){
   return <><div className="products-toolbar"><div className="products-filters"><input aria-label="Search products" placeholder="Search products" value={query} onChange={event=>setQuery(event.target.value)}/><select aria-label="Filter by category" value={category} onChange={event=>setCategory(event.target.value)}><option value="all">All categories</option>{(cats.data||[]).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><select aria-label="Filter by status" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">All statuses</option>{['active','draft','out_of_stock','archived'].map(item=><option key={item}>{item.replaceAll('_',' ')}</option>)}</select></div><Button onClick={()=>setEditing({})}>Add product</Button></div>{filtered.length?<section className="product-grid">{filtered.map(product=>{const image=product.main_image||product.product_images?.[0]?.public_url;const categories=product.product_categories?.map(item=>item.category?.name).filter(Boolean).join(', ')||'Uncategorised';return <article className="product-card" key={product.id}><div className="product-card-image">{image?<img src={image} alt={product.name}/>:<span>MK</span>}<Status>{product.status}</Status></div><div className="product-card-body"><p>{categories}</p><h2>{product.name}</h2><div className="product-pricing"><strong>{money(product.sale_price||product.price)}</strong>{product.sale_price&&<s>{money(product.price)}</s>}</div><div className="product-meta"><span>Stock <b>{product.stock_quantity}</b></span><span>{date(product.updated_at)}</span></div><div className="product-card-actions"><Button className="quiet" onClick={()=>setEditing(product)}>Edit</Button><Button className="quiet" onClick={async()=>{try{await archiveProduct(product.id);done('Product archived')}catch(error){setToast('The product could not be archived. Please try again.')}}}>Archive</Button><Button className="danger" onClick={()=>remove(product)}>Delete</Button></div></div></article>})}</section>:<State title="No products found" action={<Button onClick={()=>setEditing({})}>Add product</Button>}>Try adjusting your filters or add the first product.</State>}{editing&&<ProductForm product={editing.id?editing:null} categories={cats.data||[]} close={()=>setEditing(null)} onDone={done}/>} {toast&&<div className="toast">{toast}</div>}</>;
 }
 
-function Orders(){const data=useData(getPersonalizationOrders),[filter,setFilter]=useState('all'),[selected,setSelected]=useState(null);if(data.loading)return <State type="loading" title="Loading orders"/>;if(data.error)return <State type="error" title="Orders are unavailable" action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;const list=(data.data||[]).filter(x=>filter==='all'||x.order_status===filter);return <><div className="page-tools"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option>{states.map(x=><option key={x}>{x}</option>)}</select></div>{list.length?<Table headers={['Order #','Customer','Items','Total','Payment','Status','Date','']}>{list.map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.payment_status}</Status></td><td><Status>{o.order_status}</Status></td><td>{date(o.created_at)}</td><td><Button className="quiet" onClick={()=>setSelected(o)}>View</Button></td></tr>)}</Table>:<State title="No orders yet">Paid customer orders will appear here.</State>}{selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}</>;}
+// One table renderer shared by all three sections below — same columns/row shape as before,
+// just fed a pre-filtered slice of the same `orders` records (never a separate query/table).
+function OrdersTable({orders,setSelected,emptyTitle,emptyBody}){
+  if(!orders.length)return <State title={emptyTitle}>{emptyBody}</State>;
+  return <Table headers={['Order #','Customer','Items','Amount','Payment status','Order status','Date','']}>{orders.map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.payment_status}</Status></td><td><Status>{statusLabel(o.order_status)}</Status></td><td>{date(o.created_at)}</td><td><Button className="quiet" onClick={()=>setSelected(o)}>View details</Button></td></tr>)}</Table>;
+}
+// Active / Completed / Cancelled are a client-side grouping of the SAME orders records fetched
+// once above — no separate query, no duplicate data. Moving an order to Completed (or
+// Cancelled) in OrderModal below updates orders.order_status in place; on the next refresh the
+// same row simply falls into a different group here, "moving" between sections without ever
+// being duplicated or re-created.
+function Orders(){
+  const data=useData(getPersonalizationOrders),[selected,setSelected]=useState(null);
+  if(data.loading)return <State type="loading" title="Loading orders"/>;
+  if(data.error)return <State type="error" title="Orders are unavailable" action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;
+  const all=data.data||[];
+  const active=all.filter(o=>ACTIVE_STATUSES.includes(o.order_status));
+  const completed=all.filter(o=>COMPLETED_STATUSES.includes(o.order_status));
+  const cancelled=all.filter(o=>CANCELLED_STATUSES.includes(o.order_status));
+  return <>
+    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{active.length} order{active.length===1?'':'s'}</p><h2>Active Orders</h2></div></div><OrdersTable orders={active} setSelected={setSelected} emptyTitle="No active orders" emptyBody="Pending, confirmed, processing, and shipped orders will appear here."/></section>
+    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{completed.length} order{completed.length===1?'':'s'}</p><h2>Completed Orders</h2></div></div><OrdersTable orders={completed} setSelected={setSelected} emptyTitle="No completed orders yet" emptyBody="Orders marked Completed will move here automatically."/></section>
+    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{cancelled.length} order{cancelled.length===1?'':'s'}</p><h2>Cancelled Orders</h2></div></div><OrdersTable orders={cancelled} setSelected={setSelected} emptyTitle="No cancelled orders" emptyBody="Orders marked Cancelled will move here automatically."/></section>
+    {selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}
+  </>;
+}
 function OrderModal({order,close,refresh}){
   const [status,setStatus]=useState(order.order_status),[busy,setBusy]=useState(false),[error,setError]=useState('');
   // Only calls updateOrderStatus (and the notification) when the status actually changed —
@@ -101,7 +153,12 @@ function OrderModal({order,close,refresh}){
     <p><b>Order date</b>{date(order.created_at)}</p>
     <p><b>Payment status</b><Status>{order.payment_status}</Status></p>
     <p><b>Total amount</b>{money(order.total)}</p>
-    <label>Order status<select value={status} onChange={e=>setStatus(e.target.value)}>{states.map(x=><option key={x}>{x}</option>)}</select></label>
+    <label>Order status<select value={status} onChange={e=>setStatus(e.target.value)}>
+      {/* If this order is still on a legacy value (ready/refunded) not offered below, show it
+          as its own option so the dropdown always reflects the order's real current status. */}
+      {!STATUS_OPTIONS.some(o=>o.value===order.order_status)&&<option value={order.order_status}>{statusLabel(order.order_status)}</option>}
+      {STATUS_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+    </select></label>
     {error&&<p className="form-error">{error}</p>}
     <Button disabled={busy} onClick={save}>{busy?'Updating…':'Update status'}</Button>
   </div></Modal>}
@@ -112,18 +169,23 @@ function InventoryModal({p,refresh,close}){const [quantity,setQuantity]=useState
 function Customers(){return <GenericList kind="customers" load={getCustomers} columns={['Name','Email','Phone','Joined']}>{items=>items.map(c=><tr key={c.id}><td>{c.name||'—'}</td><td>{c.email}</td><td>{c.phone||'—'}</td><td>{date(c.created_at)}</td></tr>)}</GenericList>}
 function Reviews(){return <GenericList kind="reviews" load={getReviews} columns={['Product','Customer','Rating','Review','Status','Date','']} >{(items,refresh)=>items.map(r=><tr key={r.id}><td>{r.product?.name||'—'}</td><td>{r.customer?.name||r.customer?.email||'—'}</td><td>{r.rating}/5</td><td>{r.review||'—'}</td><td><Status>{r.status}</Status></td><td>{date(r.created_at)}</td><td>{r.status==='pending'&&<><Button className="quiet" onClick={async()=>{await approveReview(r.id);refresh()}}>Approve</Button><Button className="danger" onClick={async()=>{await rejectReview(r.id);refresh()}}>Reject</Button></>}</td></tr>)}</GenericList>}
 function Categories(){const [open,setOpen]=useState(false);const data=useData(getCategories);const [form,setForm]=useState({name:'',slug:'',description:'',status:true});const save=async()=>{try{await requireAdmin();const client=requireSupabase();const {error}=await client.from('categories').insert(form);if(error)throw error;setOpen(false);data.refresh()}catch(e){alert(e.message)}};if(data.loading)return <State type="loading" title="Loading categories"/>;if(data.error)return <State type="error" title="Categories are unavailable">{data.error}</State>;return <><div className="page-tools"><Button onClick={()=>setOpen(true)}>Create category</Button></div>{data.data?.length?<Table headers={['Name','Slug','Products','Status','Created']}>{data.data.map(c=><tr key={c.id}><td>{c.name}</td><td>{c.slug}</td><td>{c.product_categories?.[0]?.count||0}</td><td><Status>{c.status?'Active':'Archived'}</Status></td><td>{date(c.created_at)}</td></tr>)}</Table>:<State title="No categories yet"/>}{open&&<Modal close={()=>setOpen(false)}><p className="admin-kicker">Catalogue</p><h2>Create category</h2><div className="admin-form"><label>Name<input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value,slug:e.target.value.toLowerCase().replace(/[^a-z0-9]+/g,'-')}))}/></label><label>Slug<input value={form.slug} onChange={e=>setForm(f=>({...f,slug:e.target.value}))}/></label><label>Description<textarea value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))}/></label><Button onClick={save}>Create category</Button></div></Modal>}</>}
-// Two storage backends can appear here: newer photos have cloudinary_public_id/original_url
-// (uploaded to Cloudinary — see server/cloudinary.js) and are shown/downloaded directly, since
-// Cloudinary's secure_url is already a stable, permanent link; older photos (uploaded before
-// the Cloudinary switch) only have storage_path against the private Supabase
-// customer-personalization bucket and still need a signed URL generated on demand, scoped to
-// the signed-in admin's own session.
+// The live personalization_assets table only has: id, order_id, order_item_id, storage_path,
+// public_url, original_filename, created_at. Every photo (see storePersonalizationPhoto in
+// server/razorpay.js) is uploaded to Cloudinary and its permanent secure_url is written to
+// public_url — that column is what's rendered/downloaded directly here, no signing needed since
+// it's already a stable public link. storage_path holds the Cloudinary public id (kept for the
+// NOT NULL constraint and as the download filename hint) rather than a Supabase Storage path,
+// so a row with public_url is never routed through the signed-URL flow below. The signed-URL
+// fallback (getPersonalizationSignedUrl(storage_path) against the private
+// customer-personalization bucket) only applies to a genuinely older row that has a
+// storage_path but no public_url — none are known to exist, but it's kept as a harmless
+// fallback rather than deleted, since it costs nothing and covers that case if it ever occurs.
 function cloudinaryVariant(url,transformation){return url&&url.includes('/upload/')?url.replace('/upload/',`/upload/${transformation}/`):url;}
 function PersonalizationPhotoLink({asset,index,total}){
   const [state,setState]=useState({loading:false,url:'',error:''});
-  const isCloudinary=Boolean(asset.cloudinary_public_id&&asset.original_url);
+  const hasPublicUrl=Boolean(asset.public_url);
   const reveal=async()=>{
-    if(isCloudinary)return asset.original_url;
+    if(hasPublicUrl)return asset.public_url;
     if(state.url)return state.url;
     setState(s=>({...s,loading:true,error:''}));
     try{const url=await getPersonalizationSignedUrl(asset.storage_path);setState({loading:false,url,error:''});return url;}
@@ -131,11 +193,11 @@ function PersonalizationPhotoLink({asset,index,total}){
   };
   const view=async()=>{const win=window.open('','_blank','noopener');const url=await reveal();if(url&&win)win.location.href=url;else if(win)win.close();};
   const download=async()=>{
-    if(isCloudinary){
+    if(hasPublicUrl){
       // fl_attachment makes Cloudinary set Content-Disposition on its own response, which
       // forces a download of the ORIGINAL file (no resize/recompression) even cross-origin —
       // no blob round-trip needed, unlike the private-bucket signed-URL case below.
-      window.open(cloudinaryVariant(asset.original_url,'fl_attachment'),'_blank','noopener');
+      window.open(cloudinaryVariant(asset.public_url,'fl_attachment'),'_blank','noopener');
       return;
     }
     const url=await reveal();
@@ -151,7 +213,7 @@ function PersonalizationPhotoLink({asset,index,total}){
       setTimeout(()=>URL.revokeObjectURL(blobUrl),10000);
     }catch(err){setState(s=>({...s,error:'Download failed. Please try again.'}));}
   };
-  const thumb=isCloudinary?cloudinaryVariant(asset.original_url,'w_160,h_160,c_fill,q_auto'):null;
+  const thumb=hasPublicUrl?cloudinaryVariant(asset.public_url,'w_160,h_160,c_fill,q_auto'):null;
   return <span className="personalization-photo">
     {thumb&&<img className="personalization-thumb" src={thumb} alt={asset.original_filename||`Photo ${index+1}`} loading="lazy"/>}
     <small>{total>1?`Photo ${index+1}`:asset.original_filename||'Photo'}</small>
@@ -164,7 +226,7 @@ function PersonalizationPhotos({assets}){
   if(!assets||!assets.length)return <span className="personalization-empty">No photo uploaded</span>;
   return <div className="personalization-photos">{assets.map((asset,index)=><PersonalizationPhotoLink key={asset.id} asset={asset} index={index} total={assets.length}/>)}</div>;
 }
-function Personalization(){return <GenericList kind="personalization requests" load={getPersonalizationOrders} columns={['Order','Customer','Product','Custom text','Photos','Order status','Date']}>{orders=>orders.flatMap(o=>(o.order_items||[]).filter(i=>i.customization_text||(i.personalization_assets&&i.personalization_assets.length)).map(i=><tr key={i.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{i.product_name_snapshot}</td><td>{i.customization_text||'—'}</td><td><PersonalizationPhotos assets={i.personalization_assets}/></td><td><Status>{o.order_status}</Status></td><td>{date(i.created_at)}</td></tr>))}</GenericList>}
+function Personalization(){return <GenericList kind="personalization requests" load={getPersonalizationOrders} columns={['Order','Customer','Product','Custom text','Photos','Order status','Date']}>{orders=>orders.flatMap(o=>(o.order_items||[]).filter(i=>i.customization_text||(i.personalization_assets&&i.personalization_assets.length)).map(i=><tr key={i.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{i.product_name_snapshot}</td><td>{i.customization_text||'—'}</td><td><PersonalizationPhotos assets={i.personalization_assets}/></td><td><Status>{statusLabel(o.order_status)}</Status></td><td>{date(i.created_at)}</td></tr>))}</GenericList>}
 async function getCoupons(){await requireAdmin();const {data,error}=await requireSupabase().from('coupons').select('*').order('created_at',{ascending:false});if(error)throw error;return data;}
 function Coupons(){const data=useData(getCoupons);const [open,setOpen]=useState(false),[form,setForm]=useState({code:'',discount_type:'percentage',discount_value:'',status:true}),[error,setError]=useState('');const save=async()=>{try{await createCoupon({...form,code:form.code.toUpperCase(),discount_value:Number(form.discount_value)});setOpen(false);data.refresh()}catch(e){setError(e.message)}};if(data.loading)return <State type="loading" title="Loading coupons"/>;if(data.error)return <State type="error" title="Coupons are unavailable">{data.error}</State>;return <><div className="page-tools"><Button onClick={()=>setOpen(true)}>Create coupon</Button></div>{data.data?.length?<Table headers={['Code','Type','Value','Status','Expiry']}>{data.data.map(c=><tr key={c.id}><td>{c.code}</td><td>{c.discount_type}</td><td>{c.discount_type==='percentage'?`${c.discount_value}%`:money(c.discount_value)}</td><td><Status>{c.status?'Active':'Disabled'}</Status></td><td>{date(c.expires_at)}</td></tr>)}</Table>:<State title="No coupons yet"/>}{open&&<Modal close={()=>setOpen(false)}><p className="admin-kicker">Promotions</p><h2>Create coupon</h2><div className="admin-form"><label>Code<input value={form.code} onChange={e=>setForm(f=>({...f,code:e.target.value}))}/></label><label>Type<select value={form.discount_type} onChange={e=>setForm(f=>({...f,discount_type:e.target.value}))}><option value="percentage">Percentage</option><option value="fixed">Fixed</option></select></label><label>Value<input type="number" value={form.discount_value} onChange={e=>setForm(f=>({...f,discount_value:e.target.value}))}/></label>{error&&<p className="form-error">{error}</p>}<Button onClick={save}>Create coupon</Button></div></Modal>}</>}
 function Settings(){return <section className="panel"><p className="admin-kicker">Security</p><h2>Admin access is database-backed</h2><p>The current session must have <code>profiles.role = 'admin'</code>. Customer-facing credentials never bypass Supabase RLS.</p></section>}

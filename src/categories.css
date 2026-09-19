@@ -161,29 +161,3 @@
 
 @media(max-width:380px){.category-products .catalog-grid{gap:22px 8px}.catalog-controls select{max-width:66px}.catalog-controls button,.catalog-controls label{padding:0 7px}.category-products .catalog-copy h3{font-size:11.5px}.category-products .catalog-add{font-size:9.5px}}
 
-/* Order tracking page (/track-order) — reuses .category-page/.category-header chrome and
-   .checkout-form/.text-field/.primary/.text-link from the checkout flow so this page matches
-   the rest of the storefront without duplicating its base styles. */
-.track-order-main{max-width:520px;margin:0 auto;padding:28px 20px 64px}
-.track-order-hero{text-align:center;margin-bottom:26px}
-.track-order-hero h1{font-family:'DM Serif Display';font-size:clamp(26px,5vw,34px);font-weight:400;margin:6px 0 10px}
-.track-order-hero .lede{color:var(--ink-soft);font-size:13.5px;line-height:1.5}
-.track-order-form{display:grid;gap:14px}
-.track-order-result{display:grid;gap:20px;border:1px solid var(--line);border-radius:18px;padding:24px 20px;background:var(--paper)}
-.track-order-summary h2{font-family:'DM Serif Display';font-weight:400;font-size:22px;margin:4px 0}
-.track-order-summary small{color:var(--ink-soft);font-size:12px}
-.track-order-details{display:grid;gap:14px;font-size:13px}
-.track-order-details b{display:block;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px}
-.track-order-details p{margin:0 0 2px;line-height:1.5}
-.track-timeline{list-style:none;display:flex;justify-content:space-between;gap:4px;margin:4px 0;padding:0}
-.track-timeline li{flex:1;text-align:center;position:relative;color:var(--ink-soft)}
-.track-timeline li::before{content:'';position:absolute;top:5px;left:-50%;width:100%;height:2px;background:var(--line);z-index:0}
-.track-timeline li:first-child::before{display:none}
-.track-timeline li.is-done::before{background:var(--rose)}
-.track-timeline-dot{display:block;width:12px;height:12px;border-radius:50%;background:var(--line);margin:0 auto 6px;position:relative;z-index:1}
-.track-timeline li.is-done .track-timeline-dot{background:var(--rose)}
-.track-timeline-label{font-size:9.5px;letter-spacing:.2px}
-.track-status-banner{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--blush)}
-.track-status-banner strong{display:block;font-size:14px;margin-bottom:2px}
-.track-status-banner p{margin:0;font-size:12.5px;color:var(--ink-soft)}
-.track-status-refunded{background:var(--paper)}

@@ -1,7 +1,6 @@
 {
   "rewrites": [
     { "source": "/categories", "destination": "/index.html" },
-    { "source": "/admin/(.*)", "destination": "/index.html" },
-    { "source": "/track-order", "destination": "/index.html" }
+    { "source": "/admin/(.*)", "destination": "/index.html" }
   ]
 }
