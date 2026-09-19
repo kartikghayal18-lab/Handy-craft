@@ -30,6 +30,20 @@ export class CheckoutError extends Error {
   }
 }
 
+// A Supabase/PostgREST response of "permission denied for table X" (Postgres error code 42501)
+// means OUR OWN service-role key is missing a database GRANT — it is never something the
+// caller (a customer uploading a photo, or an admin changing a status) did wrong. Before this
+// fix, every place that read a Supabase REST response forwarded PostgREST's status code
+// verbatim, so a missing grant surfaced to the browser as a plain 403 — indistinguishable from
+// "you are not allowed to do this," which is actively misleading for both a customer (who did
+// nothing wrong) and whoever is debugging the report ("customer upload gets 403" reads like an
+// auth bug, not a database configuration gap). This detects that specific case so callers can
+// remap it to a 500 (our fault, not theirs) instead. Exported so server/orders.js's readJson
+// uses the exact same check rather than a second copy of this logic.
+export function isPostgresPermissionDenied(status, data) {
+  return status === 403 && (data?.code === '42501' || /permission denied for table/i.test(data?.message || ''));
+}
+
 export function requireServerEnv(name, fallbacks = []) {
   for (const key of [name, ...fallbacks]) {
     const value = readLocalDevelopmentEnv(key) || process.env[key]?.trim();
@@ -115,11 +129,20 @@ function supabaseConfig({ serviceRole = false } = {}) {
   return { url, key };
 }
 
+// Shared by both Razorpay's HTTP API (createRazorpayOrder, fetchRazorpayPayment — error shape
+// {error:{description,reason,code}}) and service-role Supabase REST calls below (error shape
+// {code,message}, e.g. Postgres 42501 "permission denied"). isPostgresPermissionDenied only
+// matches that second, very specific Postgres error shape, so it can never misfire on a
+// genuine Razorpay error.
 async function readJson(response, fallbackMessage) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!response.ok) {
+    if (isPostgresPermissionDenied(response.status, data)) {
+      console.error('[service-role-permission-denied]', { detail: data?.message, fallbackMessage });
+      throw new CheckoutError('This request could not be completed right now. Please try again shortly.', 500, 'SERVICE_ROLE_PERMISSION_DENIED');
+    }
     const message = data?.error?.description || data?.error?.reason || data?.message || fallbackMessage;
     throw new CheckoutError(message, response.status >= 500 ? 502 : response.status, 'UPSTREAM_ERROR');
   }
@@ -303,7 +326,15 @@ async function readJsonRows(response, fallbackMessage) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-  if (!response.ok) throw new CheckoutError(data?.message || fallbackMessage, response.status >= 500 ? 502 : response.status, 'UPSTREAM_ERROR');
+  if (!response.ok) {
+    if (isPostgresPermissionDenied(response.status, data)) {
+      // Logged in full server-side (message only — never headers/keys) so this is diagnosable
+      // from Vercel logs; the client only ever sees a generic 500, never "permission denied".
+      console.error('[service-role-permission-denied]', { detail: data?.message, fallbackMessage });
+      throw new CheckoutError('This request could not be completed right now. Please try again shortly.', 500, 'SERVICE_ROLE_PERMISSION_DENIED');
+    }
+    throw new CheckoutError(data?.message || fallbackMessage, response.status >= 500 ? 502 : response.status, 'UPSTREAM_ERROR');
+  }
   return data;
 }
 

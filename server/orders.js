@@ -1,4 +1,4 @@
-import { CheckoutError, requireServerEnv } from './razorpay.js';
+import { CheckoutError, isPostgresPermissionDenied, requireServerEnv } from './razorpay.js';
 
 // Used by the admin status-notification endpoint (api/orders/notify-status.js), which needs
 // service-role access to `orders` — there is no anon/public RLS policy on that table (by
@@ -21,7 +21,19 @@ async function readJson(response, fallbackMessage) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-  if (!response.ok) throw new CheckoutError(data?.message || fallbackMessage, response.status >= 500 ? 502 : response.status, 'UPSTREAM_ERROR');
+  if (!response.ok) {
+    // See isPostgresPermissionDenied's comment in server/razorpay.js: without this, a missing
+    // service_role grant on `profiles` made requireAdminFromToken() return a plain 403 for
+    // EVERY admin action on this endpoint (api/orders/notify-status.js), regardless of whether
+    // the signed-in admin genuinely had the admin role — indistinguishable from a real
+    // "you're not an admin" rejection. This remaps it to a 500 so that distinction is visible
+    // again, without weakening the real admin-role check below it in any way.
+    if (isPostgresPermissionDenied(response.status, data)) {
+      console.error('[service-role-permission-denied]', { detail: data?.message, fallbackMessage });
+      throw new CheckoutError('This request could not be completed right now. Please try again shortly.', 500, 'SERVICE_ROLE_PERMISSION_DENIED');
+    }
+    throw new CheckoutError(data?.message || fallbackMessage, response.status >= 500 ? 502 : response.status, 'UPSTREAM_ERROR');
+  }
   return data;
 }
 

@@ -227,12 +227,31 @@ function Categories(){const [open,setOpen]=useState(false);const data=useData(ge
 // customer-personalization bucket) only applies to a genuinely older row that has a
 // storage_path but no public_url — none are known to exist, but it's kept as a harmless
 // fallback rather than deleted, since it costs nothing and covers that case if it ever occurs.
+//
+// Belt-and-suspenders fallback (added per explicit requirement): if a row is somehow missing
+// public_url (e.g. the insert partially failed after a successful Cloudinary upload) but its
+// storage_path is recognisably a Cloudinary public id from our own upload folder
+// ("forever-handy/personalization/..."), reconstruct the delivery URL directly from it rather
+// than falling through to "No photo uploaded" or the (inapplicable, private-bucket) signed-URL
+// path. This needs the Cloudinary cloud name client-side — it is NOT a secret (Cloudinary cloud
+// names are public in every delivery URL by design), so it's read from
+// VITE_CLOUDINARY_CLOUD_NAME, mirroring the existing VITE_SUPABASE_URL/VITE_RAZORPAY_KEY_ID
+// pattern. If that env var isn't set, this fallback simply doesn't apply (returns null) and the
+// genuinely-legacy signed-URL path below still runs.
+const CLOUDINARY_CLOUD_NAME=typeof import.meta!=='undefined'?import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME:undefined;
+function cloudinaryUrlFromStoragePath(storagePath){
+  if(!storagePath||!CLOUDINARY_CLOUD_NAME)return null;
+  if(!storagePath.startsWith('forever-handy/personalization/'))return null;
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto/${storagePath}`;
+}
 function cloudinaryVariant(url,transformation){return url&&url.includes('/upload/')?url.replace('/upload/',`/upload/${transformation}/`):url;}
 function PersonalizationPhotoLink({asset,index,total}){
   const [state,setState]=useState({loading:false,url:'',error:''});
-  const hasPublicUrl=Boolean(asset.public_url);
+  const reconstructedUrl=asset.public_url?null:cloudinaryUrlFromStoragePath(asset.storage_path);
+  const effectiveUrl=asset.public_url||reconstructedUrl;
+  const hasPublicUrl=Boolean(effectiveUrl);
   const reveal=async()=>{
-    if(hasPublicUrl)return asset.public_url;
+    if(hasPublicUrl)return effectiveUrl;
     if(state.url)return state.url;
     setState(s=>({...s,loading:true,error:''}));
     try{const url=await getPersonalizationSignedUrl(asset.storage_path);setState({loading:false,url,error:''});return url;}
@@ -244,7 +263,7 @@ function PersonalizationPhotoLink({asset,index,total}){
       // fl_attachment makes Cloudinary set Content-Disposition on its own response, which
       // forces a download of the ORIGINAL file (no resize/recompression) even cross-origin —
       // no blob round-trip needed, unlike the private-bucket signed-URL case below.
-      window.open(cloudinaryVariant(asset.public_url,'fl_attachment'),'_blank','noopener');
+      window.open(cloudinaryVariant(effectiveUrl,'fl_attachment'),'_blank','noopener');
       return;
     }
     const url=await reveal();
@@ -260,7 +279,7 @@ function PersonalizationPhotoLink({asset,index,total}){
       setTimeout(()=>URL.revokeObjectURL(blobUrl),10000);
     }catch(err){setState(s=>({...s,error:'Download failed. Please try again.'}));}
   };
-  const thumb=hasPublicUrl?cloudinaryVariant(asset.public_url,'w_160,h_160,c_fill,q_auto'):null;
+  const thumb=hasPublicUrl?cloudinaryVariant(effectiveUrl,'w_160,h_160,c_fill,q_auto'):null;
   return <span className="personalization-photo">
     {/* Clicking the thumbnail itself opens the full-size image, per the admin UI requirement —
         the separate "View photo" button below does the same thing and stays as a visible,
