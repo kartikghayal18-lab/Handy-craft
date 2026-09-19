@@ -40,6 +40,60 @@ export async function getOrderForNotification(orderId) {
   return rows?.[0] || null;
 }
 
+// TEMPORARY diagnostic (admin-only, see api/admin/personalization-diagnostic.js). Fetches one
+// order's order_items and, for each, every personalization_assets row — with service role, so
+// this reads the real database state regardless of what the admin dashboard's own RLS-bound
+// query happens to return, which is the point: it tells us whether the problem is "no row was
+// ever inserted" vs. "a row exists but the admin UI isn't showing it". Logs order id, each
+// order_item id, how many personalization_assets rows were found for it, and whether each row's
+// public_url is populated — never the row's actual URL/filename/secrets. Safe to delete once
+// the personalization photo flow is confirmed working end-to-end.
+export async function diagnosePersonalizationForOrder(orderId) {
+  const { url, key } = supabaseServiceConfig();
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+
+  const orderEndpoint = new URL(`${url}/rest/v1/orders`);
+  orderEndpoint.searchParams.set('select', 'id,order_number,payment_status,order_status');
+  orderEndpoint.searchParams.set('id', `eq.${orderId}`);
+  const orders = await readJson(await fetch(orderEndpoint, { headers }), 'Unable to look up this order.');
+  const order = orders?.[0];
+  if (!order) {
+    console.log('[personalization-diagnostic]', { orderId, found: false });
+    return { found: false, orderId };
+  }
+
+  const itemsEndpoint = new URL(`${url}/rest/v1/order_items`);
+  itemsEndpoint.searchParams.set('select', 'id,product_id,product_name_snapshot');
+  itemsEndpoint.searchParams.set('order_id', `eq.${orderId}`);
+  const items = await readJson(await fetch(itemsEndpoint, { headers }), 'Unable to look up order items.') || [];
+
+  const assetsEndpoint = new URL(`${url}/rest/v1/personalization_assets`);
+  assetsEndpoint.searchParams.set('select', 'id,order_item_id,public_url,storage_path,original_filename');
+  assetsEndpoint.searchParams.set('order_id', `eq.${orderId}`);
+  const assets = await readJson(await fetch(assetsEndpoint, { headers }), 'Unable to look up personalization assets.') || [];
+
+  const perItem = items.map(item => {
+    const rows = assets.filter(a => a.order_item_id === item.id);
+    return {
+      orderItemId: item.id,
+      productId: item.product_id,
+      productName: item.product_name_snapshot,
+      personalizationAssetsFound: rows.length,
+      allHavePublicUrl: rows.length > 0 && rows.every(r => Boolean(r.public_url)),
+      rowsMissingPublicUrl: rows.filter(r => !r.public_url).length,
+      hasOriginalFilename: rows.every(r => Boolean(r.original_filename)),
+    };
+  });
+
+  console.log('[personalization-diagnostic]', {
+    orderId, orderNumber: order.order_number, paymentStatus: order.payment_status, orderStatus: order.order_status,
+    orderItemCount: items.length, totalPersonalizationAssetsForOrder: assets.length,
+    perItem,
+  });
+
+  return { found: true, order, perItem };
+}
+
 // Verifies a Supabase access token belongs to a signed-in admin, mirroring the same
 // profiles.role === 'admin' check src/lib/supabase/auth.js's requireAdmin() already does
 // client-side — re-checked server-side here because this endpoint can send email, so it

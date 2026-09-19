@@ -106,23 +106,70 @@ function OrdersTable({orders,setSelected,emptyTitle,emptyBody}){
   if(!orders.length)return <State title={emptyTitle}>{emptyBody}</State>;
   return <Table headers={['Order #','Customer','Items','Amount','Payment status','Order status','Date','']}>{orders.map(o=><tr key={o.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{o.order_items?.length||0}</td><td>{money(o.total)}</td><td><Status>{o.payment_status}</Status></td><td><Status>{statusLabel(o.order_status)}</Status></td><td>{date(o.created_at)}</td><td><Button className="quiet" onClick={()=>setSelected(o)}>View details</Button></td></tr>)}</Table>;
 }
+// Matches the same order fields a staff member would actually search by — order number,
+// customer name, customer email — case-insensitively. Client-side, same as the Products page's
+// search (there is no existing server-side order search to build on, and getPersonalizationOrders
+// already loads every order in one query, so filtering the already-loaded list is the "existing
+// data layer", per the requirement to prefer server-side filtering only if the architecture
+// already supports it).
+function orderMatchesSearch(order, query){
+  const needle=query.trim().toLowerCase();
+  if(!needle)return true;
+  return [order.order_number,order.customer?.name,order.customer?.email,order.shipping_name]
+    .filter(Boolean).some(value=>String(value).toLowerCase().includes(needle));
+}
 // Active / Completed / Cancelled are a client-side grouping of the SAME orders records fetched
 // once above — no separate query, no duplicate data. Moving an order to Completed (or
 // Cancelled) in OrderModal below updates orders.order_status in place; on the next refresh the
 // same row simply falls into a different group here, "moving" between sections without ever
 // being duplicated or re-created.
+//
+// The status filter (STATUS_OPTIONS — the same 6 values + labels the status dropdown in
+// OrderModal already uses, so there is exactly one place that defines what these statuses are
+// and mean) narrows the same `all` list by the real order_status column — "Processing" filters
+// to the existing preparing value, "Completed" to the existing delivered value, exactly as
+// everywhere else in this file. The search box narrows it further, and the two combine (an
+// order must match both). Picking a specific status collapses the three sections into a single
+// filtered table, since "only Shipped orders" doesn't need three group headings; picking "All
+// Orders" restores the grouped view.
 function Orders(){
   const data=useData(getPersonalizationOrders),[selected,setSelected]=useState(null);
+  const [query,setQuery]=useState(''),[statusFilter,setStatusFilter]=useState('all');
   if(data.loading)return <State type="loading" title="Loading orders"/>;
   if(data.error)return <State type="error" title="Orders are unavailable" action={<Button onClick={data.refresh}>Try again</Button>}>{data.error}</State>;
   const all=data.data||[];
-  const active=all.filter(o=>ACTIVE_STATUSES.includes(o.order_status));
-  const completed=all.filter(o=>COMPLETED_STATUSES.includes(o.order_status));
-  const cancelled=all.filter(o=>CANCELLED_STATUSES.includes(o.order_status));
+  const searched=all.filter(o=>orderMatchesSearch(o,query));
+  // Counts always reflect the current search (so switching statuses while searching shows an
+  // accurate "Shipped (2)" for that search), independent of which status is currently selected.
+  const countFor=value=>value==='all'?searched.length:searched.filter(o=>o.order_status===value).length;
+  const filtered=statusFilter==='all'?searched:searched.filter(o=>o.order_status===statusFilter);
+  const noSearchMatchBody=query.trim()?'No orders match your search.':undefined;
+
+  const filterBar=<div className="page-tools">
+    <input aria-label="Search orders" placeholder="Search by order number or customer" value={query} onChange={e=>setQuery(e.target.value)}/>
+    <select aria-label="Filter by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+      <option value="all">All Orders ({countFor('all')})</option>
+      {STATUS_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label} ({countFor(o.value)})</option>)}
+    </select>
+  </div>;
+
+  if(statusFilter!=='all'){
+    const label=statusLabel(statusFilter);
+    return <>
+      {filterBar}
+      <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{filtered.length} order{filtered.length===1?'':'s'}</p><h2>{label} Orders</h2></div></div><OrdersTable orders={filtered} setSelected={setSelected} emptyTitle={`No ${label.toLowerCase()} orders`} emptyBody={noSearchMatchBody||'Orders will appear here once they reach this status.'}/></section>
+      {selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}
+    </>;
+  }
+
+  const active=filtered.filter(o=>ACTIVE_STATUSES.includes(o.order_status));
+  const completed=filtered.filter(o=>COMPLETED_STATUSES.includes(o.order_status));
+  const cancelled=filtered.filter(o=>CANCELLED_STATUSES.includes(o.order_status));
   return <>
-    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{active.length} order{active.length===1?'':'s'}</p><h2>Active Orders</h2></div></div><OrdersTable orders={active} setSelected={setSelected} emptyTitle="No active orders" emptyBody="Pending, confirmed, processing, and shipped orders will appear here."/></section>
-    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{completed.length} order{completed.length===1?'':'s'}</p><h2>Completed Orders</h2></div></div><OrdersTable orders={completed} setSelected={setSelected} emptyTitle="No completed orders yet" emptyBody="Orders marked Completed will move here automatically."/></section>
-    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{cancelled.length} order{cancelled.length===1?'':'s'}</p><h2>Cancelled Orders</h2></div></div><OrdersTable orders={cancelled} setSelected={setSelected} emptyTitle="No cancelled orders" emptyBody="Orders marked Cancelled will move here automatically."/></section>
+    {filterBar}
+    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{active.length} order{active.length===1?'':'s'}</p><h2>Active Orders</h2></div></div><OrdersTable orders={active} setSelected={setSelected} emptyTitle="No active orders" emptyBody={noSearchMatchBody||'Pending, confirmed, processing, and shipped orders will appear here.'}/></section>
+    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{completed.length} order{completed.length===1?'':'s'}</p><h2>Completed Orders</h2></div></div><OrdersTable orders={completed} setSelected={setSelected} emptyTitle="No completed orders yet" emptyBody={noSearchMatchBody||'Orders marked Completed will move here automatically.'}/></section>
+    <section className="panel"><div className="panel-head"><div><p className="admin-kicker">{cancelled.length} order{cancelled.length===1?'':'s'}</p><h2>Cancelled Orders</h2></div></div><OrdersTable orders={cancelled} setSelected={setSelected} emptyTitle="No cancelled orders" emptyBody={noSearchMatchBody||'Orders marked Cancelled will move here automatically.'}/></section>
     {selected&&<OrderModal order={selected} close={()=>setSelected(null)} refresh={data.refresh}/>}
   </>;
 }
@@ -215,8 +262,11 @@ function PersonalizationPhotoLink({asset,index,total}){
   };
   const thumb=hasPublicUrl?cloudinaryVariant(asset.public_url,'w_160,h_160,c_fill,q_auto'):null;
   return <span className="personalization-photo">
-    {thumb&&<img className="personalization-thumb" src={thumb} alt={asset.original_filename||`Photo ${index+1}`} loading="lazy"/>}
-    <small>{total>1?`Photo ${index+1}`:asset.original_filename||'Photo'}</small>
+    {/* Clicking the thumbnail itself opens the full-size image, per the admin UI requirement —
+        the separate "View photo" button below does the same thing and stays as a visible,
+        keyboard-reachable control for anyone who doesn't think to click the image. */}
+    {thumb&&<button type="button" className="personalization-thumb-btn" onClick={view} disabled={state.loading} aria-label={`Open full-size ${asset.original_filename||`photo ${index+1}`}`}><img className="personalization-thumb" src={thumb} alt={asset.original_filename||`Photo ${index+1}`} loading="lazy"/></button>}
+    <small>{asset.original_filename||(total>1?`Photo ${index+1}`:'Photo')}</small>
     <Button className="quiet" type="button" onClick={view} disabled={state.loading}>{state.loading?'Loading…':'View photo'}</Button>
     <Button className="quiet" type="button" onClick={download} disabled={state.loading}>Download original</Button>
     {state.error&&<small className="form-error">{state.error}</small>}
@@ -224,7 +274,10 @@ function PersonalizationPhotoLink({asset,index,total}){
 }
 function PersonalizationPhotos({assets}){
   if(!assets||!assets.length)return <span className="personalization-empty">No photo uploaded</span>;
-  return <div className="personalization-photos">{assets.map((asset,index)=><PersonalizationPhotoLink key={asset.id} asset={asset} index={index} total={assets.length}/>)}</div>;
+  return <div className="personalization-photos">
+    <p className="personalization-heading-label">Personalization photos</p>
+    {assets.map((asset,index)=><PersonalizationPhotoLink key={asset.id} asset={asset} index={index} total={assets.length}/>)}
+  </div>;
 }
 function Personalization(){return <GenericList kind="personalization requests" load={getPersonalizationOrders} columns={['Order','Customer','Product','Custom text','Photos','Order status','Date']}>{orders=>orders.flatMap(o=>(o.order_items||[]).filter(i=>i.customization_text||(i.personalization_assets&&i.personalization_assets.length)).map(i=><tr key={i.id}><td>{o.order_number}</td><td>{o.customer?.name||o.customer?.email||'—'}</td><td>{i.product_name_snapshot}</td><td>{i.customization_text||'—'}</td><td><PersonalizationPhotos assets={i.personalization_assets}/></td><td><Status>{statusLabel(o.order_status)}</Status></td><td>{date(i.created_at)}</td></tr>))}</GenericList>}
 async function getCoupons(){await requireAdmin();const {data,error}=await requireSupabase().from('coupons').select('*').order('created_at',{ascending:false});if(error)throw error;return data;}

@@ -332,6 +332,11 @@ export async function resolveOrderItem({ orderId, productId }) {
   const items = await readJsonRows(await fetch(itemEndpoint, { headers }), 'Unable to look up this order item.');
   const item = items?.[0];
   if (!item) throw new CheckoutError('This product is not part of that order.', 404, 'ORDER_ITEM_NOT_FOUND');
+  // TEMPORARY diagnostic (server-side only, no secrets): confirms this order/product pair
+  // actually resolved to a real order_item before any Cloudinary upload or DB insert is
+  // attempted — if this line never appears in the logs for a given order, the upload request
+  // never reached this function (or failed the order/payment lookup above it).
+  console.log('[personalization-diagnostic] resolveOrderItem', { orderId, productId, orderItemId: item.id });
   return item.id;
 }
 
@@ -357,7 +362,21 @@ export async function storePersonalizationPhoto({ orderId, orderItemId, contentT
   if (!buffer.length || buffer.length > MAX_FILE_BYTES) {
     throw new CheckoutError(`Each photo must be under ${Math.round(MAX_FILE_BYTES / (1024 * 1024))}MB.`, 400, 'FILE_TOO_LARGE');
   }
-  const { publicId, secureUrl } = await uploadPersonalizationPhoto({ buffer, contentType, orderId, orderItemId });
+  let uploadResult;
+  try {
+    uploadResult = await uploadPersonalizationPhoto({ buffer, contentType, orderId, orderItemId });
+  } catch (error) {
+    // TEMPORARY diagnostic: Cloudinary itself already logs the HTTP status/error detail in
+    // server/cloudinary.js — this line ties that failure back to the specific order/item so it
+    // shows up when grepping logs for one test order, without duplicating the secret-bearing
+    // request itself.
+    console.log('[personalization-diagnostic] cloudinary upload failed', { orderId, orderItemId, error: error?.message || String(error) });
+    throw error;
+  }
+  const { publicId, secureUrl } = uploadResult;
+  console.log('[personalization-diagnostic] cloudinary upload result', {
+    orderId, orderItemId, cloudinaryUploadStatus: 'success', hasSecureUrl: Boolean(secureUrl), hasPublicId: Boolean(publicId),
+  });
 
   const { url, key } = supabaseConfig({ serviceRole: true });
   const insertResponse = await fetch(`${url}/rest/v1/personalization_assets`, {
@@ -371,6 +390,21 @@ export async function storePersonalizationPhoto({ orderId, orderItemId, contentT
       original_filename: String(originalFilename || 'photo').slice(0, 255),
     }),
   });
-  const rows = await readJsonRows(insertResponse, 'The photo was uploaded but could not be attached to the order.');
-  return rows?.[0];
+  let rows;
+  try {
+    rows = await readJsonRows(insertResponse, 'The photo was uploaded but could not be attached to the order.');
+  } catch (error) {
+    // TEMPORARY diagnostic: if the Cloudinary upload above succeeded but this insert fails
+    // (e.g. a missing service_role grant on personalization_assets, or an unapplied migration
+    // that added/renamed a column), this is the line that proves the photo made it to
+    // Cloudinary but never became a database row — the exact failure mode this bug report
+    // describes.
+    console.log('[personalization-diagnostic] personalization_assets insert failed', { orderId, orderItemId, error: error?.message || String(error) });
+    throw error;
+  }
+  const inserted = rows?.[0];
+  console.log('[personalization-diagnostic] personalization_assets insert result', {
+    orderId, orderItemId, insertedRowId: inserted?.id || null, hasPublicUrl: Boolean(inserted?.public_url),
+  });
+  return inserted;
 }
