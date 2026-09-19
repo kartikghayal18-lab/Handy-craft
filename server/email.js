@@ -1,4 +1,5 @@
 import { requireServerEnv } from './razorpay.js';
+import { normalizeOrderNumber, normalizePhone } from './orders.js';
 
 // Order-update emails (confirmation + status change). No SMS, per product decision — email only.
 // No email provider existed in this codebase before this file (grepped for RESEND/SENDGRID/etc,
@@ -48,9 +49,21 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-function trackOrderUrl() {
+// Builds the tracking link with the canonical, already-normalized order id + phone as query
+// params, so a customer who clicks the button never has to type anything: the tracking page
+// reads these and prefills the form. Uses the exact same normalizeOrderNumber/normalizePhone
+// functions the tracking API itself uses to validate a submission, so the value embedded here
+// can never drift from what the backend actually expects — no leading "#", no formatting
+// differences. Falls back to the bare, param-less link when either value is missing (e.g. an
+// order with no phone on file), rather than emitting a broken query string.
+function trackOrderUrl({ orderNumber, phone } = {}) {
   const siteUrl = getSiteUrl();
-  return siteUrl ? `${siteUrl}/track-order` : '/track-order';
+  const base = siteUrl ? `${siteUrl}/track-order` : '/track-order';
+  const cleanOrderNumber = normalizeOrderNumber(orderNumber);
+  const cleanPhone = normalizePhone(phone);
+  if (!cleanOrderNumber || cleanPhone.length !== 10) return base;
+  const params = new URLSearchParams({ orderId: cleanOrderNumber, phone: cleanPhone });
+  return `${base}?${params.toString()}`;
 }
 
 // Renders the items/total block shared by both emails — the "order summary" the status-update
@@ -134,7 +147,7 @@ function statusLabel(status) {
 }
 
 // Sent once, right after a payment is verified and the order is actually created — never before.
-export async function sendOrderConfirmationEmail({ to, customerName, orderNumber, items, total, deliveryAddress, status }) {
+export async function sendOrderConfirmationEmail({ to, customerName, orderNumber, items, total, deliveryAddress, status, phone }) {
   const bodyLines = [
     `Hi ${escapeHtml(customerName || 'there')},`,
     `Thank you for your order. We've received your order <strong>#${escapeHtml(orderNumber)}</strong> and it's now being processed.`,
@@ -147,7 +160,7 @@ export async function sendOrderConfirmationEmail({ to, customerName, orderNumber
     bodyLines,
     summaryHtml: orderSummaryBlock({ items, total }),
     ctaLabel: 'Track Your Order',
-    ctaUrl: trackOrderUrl(),
+    ctaUrl: trackOrderUrl({ orderNumber, phone }),
   });
   return sendEmail({ to, subject: `Your Forever Handy order #${orderNumber} is confirmed`, html });
 }
@@ -155,7 +168,7 @@ export async function sendOrderConfirmationEmail({ to, customerName, orderNumber
 // Sent when an admin changes an order's status from the existing Orders page — layered after
 // the existing status-update call, never in place of it. Includes the order summary (items +
 // total) and tracking info when available, per the required email content.
-export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber, status, total, items, trackingNumber, trackingUrl }) {
+export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber, status, total, items, trackingNumber, trackingUrl, phone }) {
   const label = statusLabel(status);
   const html = baseLayout({
     heading: `Order #${orderNumber} is now ${label}`,
@@ -167,7 +180,10 @@ export async function sendOrderStatusUpdateEmail({ to, customerName, orderNumber
     summaryHtml: orderSummaryBlock({ items, total }),
     trackingNumber,
     ctaLabel: 'Track Your Order',
-    ctaUrl: trackingUrl || trackOrderUrl(),
+    // trackingUrl, when set, is an external carrier/shipping tracking link (order.tracking_url)
+    // — takes priority when present. Otherwise this always links our own /track-order page
+    // with the order id + phone pre-filled via trackOrderUrl().
+    ctaUrl: trackingUrl || trackOrderUrl({ orderNumber, phone }),
   });
   return sendEmail({ to, subject: `Your Forever Handy order #${orderNumber} is now ${label}`, html });
 }

@@ -71,6 +71,9 @@ export default async function handler(req, res) {
         total: enriched?.total ?? order?.total,
         deliveryAddress,
         status: enriched?.order_status || 'confirmed',
+        // Real checkout-validated phone (enriched DB value preferred, checkout token as
+        // fallback) so the email's tracking link can be pre-filled with both fields.
+        phone: enriched?.shipping_phone || checkout.shipping?.phone,
       });
     }
 

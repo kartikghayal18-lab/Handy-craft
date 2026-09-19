@@ -175,8 +175,20 @@ function OrderStatusTimeline({ status }) {
   return <ol className="track-timeline" aria-label="Order status timeline">{TRACK_STATUS_STEPS.map((step, index) => <li key={step} className={index <= currentIndex ? 'is-done' : ''} aria-current={index === currentIndex ? 'step' : undefined}><span className="track-timeline-dot"/><span className="track-timeline-label">{TRACK_STATUS_LABELS[step]}</span></li>)}</ol>;
 }
 
+// Reads ?orderId=...&phone=... from the URL (the email's tracking-link CTA sends these) and
+// strips a leading "#" client-side too — belt-and-suspenders alongside the backend's own
+// normalizeOrderNumber(), since a customer can also land here with a hand-typed or bookmarked
+// URL the backend has never seen. This only prefills the form; the backend still normalizes
+// and validates both values again on submit, exactly as before.
+function trackOrderParamsFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const orderId = (params.get('orderId') || '').trim().replace(/^#+/, '');
+  const phone = (params.get('phone') || '').trim();
+  return { orderId, phone };
+}
+
 function TrackOrderPage() {
-  const [form, setForm] = useState({ orderId: '', phone: '' });
+  const [form, setForm] = useState(trackOrderParamsFromUrl);
   const [state, setState] = useState('form'); // 'form' | 'loading' | 'error' | 'result'
   const [error, setError] = useState('');
   const [order, setOrder] = useState(null);
