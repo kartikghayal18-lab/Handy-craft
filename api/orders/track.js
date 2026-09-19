@@ -23,7 +23,19 @@ export default async function handler(req, res) {
       throw new CheckoutError('Order not found. Please check your details.', 404, 'ORDER_NOT_FOUND');
     }
 
-    const order = await findOrderForTracking({ orderNumber: orderId, phone });
+    let order;
+    try {
+      order = await findOrderForTracking({ orderNumber: orderId, phone });
+    } catch (lookupError) {
+      // findOrderForTracking's upstream Supabase call can fail with ANY status — a permission
+      // error (missing grants) comes back as 403/400, not 500, so this must never rely on
+      // status alone to decide what's safe to show the customer. Every upstream failure, no
+      // matter its status or message, becomes the exact same generic response; the real detail
+      // (e.g. "permission denied for table orders") only ever goes to the server log below,
+      // never to the client.
+      console.error('[track-order] upstream lookup failed:', lookupError?.message || lookupError);
+      throw new CheckoutError('Order not found. Please check your details.', 404, 'ORDER_NOT_FOUND');
+    }
     if (!order) {
       throw new CheckoutError('Order not found. Please check your details.', 404, 'ORDER_NOT_FOUND');
     }
@@ -52,13 +64,9 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
-    // Any unexpected/upstream error is also shown as the same generic not-found message to
-    // the customer (sendError already keeps 5xx bodies generic); only server logs (inside
-    // findOrderForTracking's upstream calls) carry the real detail.
-    if (error instanceof CheckoutError && error.status >= 500) {
-      res.status(404).json({ error: 'Order not found. Please check your details.', code: 'ORDER_NOT_FOUND' });
-      return;
-    }
+    // Every path above that can fail — missing input, no match, or an upstream lookup error —
+    // throws the same generic ORDER_NOT_FOUND CheckoutError, so this always sends the identical
+    // customer-facing response regardless of which case it was.
     sendError(res, error);
   }
 }
