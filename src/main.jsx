@@ -465,7 +465,13 @@ function Checkout({cart, close, complete}) {
       checkout.open();
     }catch(err){
       console.error('[checkout] payment setup failed',err);
-      setError('Payment could not be prepared. Please try again.');
+      // err.message is already the safe, customer-facing text the server chose to send (either
+      // a specific reason like "This product is no longer available" for a 4xx, or the generic
+      // "Secure checkout is temporarily unavailable." the server itself substitutes for any 5xx
+      // — see sendError() in server/razorpay.js). Previously this was discarded in favor of a
+      // single hardcoded string, which hid the real reason (out of stock, cart total invalid,
+      // etc.) from the customer even though the server was already returning it safely.
+      setError(err?.message||'Payment could not be prepared. Please try again.');
       paymentInProgress.current=false;
       setBusy(false);
     }

@@ -115,9 +115,16 @@ export function normalizeShipping(shipping) {
   return normalized;
 }
 
-function rupeesToPaise(value) {
+function rupeesToPaise(value, context) {
   const paise = Math.round(Number(value) * 100);
-  if (!Number.isSafeInteger(paise) || paise < 1) throw new CheckoutError('A product has an invalid price.', 409);
+  if (!Number.isSafeInteger(paise) || paise < 1) {
+    // Safe diagnostic: which product and what raw price value failed to convert — never
+    // anything from the customer's payment/shipping details. This, plus sendError() now
+    // logging every CheckoutError (see below), is what makes a 409 here traceable in Vercel
+    // logs instead of showing only "POST /api/razorpay/create-order -> 409" with no detail.
+    console.error('[checkout] invalid product price', { productId: context?.productId, rawValue: value });
+    throw new CheckoutError('A product has an invalid price.', 409, 'INVALID_PRODUCT_PRICE');
+  }
   return paise;
 }
 
@@ -149,6 +156,13 @@ async function readJson(response, fallbackMessage) {
   return data;
 }
 
+// The only place /api/razorpay/create-order can return 409 — every branch below re-validates
+// the cart against the database (never trusting client-sent prices/availability), so a 409 here
+// always means "the cart, as priced against the live database right now, isn't payable" rather
+// than a bug in create-order itself. Each branch logs safe, specific context (product id/name,
+// stock numbers, computed totals — never shipping/payment details or secrets) immediately before
+// throwing, so a 409 in Vercel's logs is traceable to the exact product/condition instead of
+// showing only the bare HTTP status.
 export async function priceTrustedCart(items) {
   const normalizedItems = normalizeItems(items);
   const { url, key } = supabaseConfig({ serviceRole: true });
@@ -162,13 +176,28 @@ export async function priceTrustedCart(items) {
 
   for (const item of normalizedItems) {
     const product = productsById.get(item.product_id);
-    if (!product || product.status !== 'active') throw new CheckoutError('A product is no longer available.', 409);
-    if (!Number.isInteger(product.stock_quantity) || product.stock_quantity < item.quantity) {
-      throw new CheckoutError(`${product.name || 'A product'} does not have enough stock.`, 409);
+    if (!product || product.status !== 'active') {
+      console.error('[checkout] cart item unavailable', {
+        productId: item.product_id,
+        found: Boolean(product),
+        status: product?.status ?? null,
+      });
+      throw new CheckoutError('A product is no longer available.', 409, 'PRODUCT_UNAVAILABLE');
     }
-    amount += rupeesToPaise(product.sale_price ?? product.price) * item.quantity;
+    if (!Number.isInteger(product.stock_quantity) || product.stock_quantity < item.quantity) {
+      console.error('[checkout] insufficient stock', {
+        productId: product.id,
+        requestedQuantity: item.quantity,
+        stockQuantity: product.stock_quantity,
+      });
+      throw new CheckoutError(`${product.name || 'A product'} does not have enough stock.`, 409, 'INSUFFICIENT_STOCK');
+    }
+    amount += rupeesToPaise(product.sale_price ?? product.price, { productId: product.id }) * item.quantity;
   }
-  if (!Number.isSafeInteger(amount) || amount < 100) throw new CheckoutError('Cart total is invalid.', 409);
+  if (!Number.isSafeInteger(amount) || amount < 100) {
+    console.error('[checkout] cart total invalid', { computedAmountPaise: amount, itemCount: normalizedItems.length });
+    throw new CheckoutError('Cart total is invalid.', 409, 'CART_TOTAL_INVALID');
+  }
   return { items: normalizedItems, amount, currency: 'INR' };
 }
 
@@ -287,8 +316,22 @@ export async function finalizeSupabaseOrder({ shipping, items, razorpayOrderId, 
         body: JSON.stringify({ email: shipping.email }),
       });
       if (!patchResponse.ok) {
-        const detail = await patchResponse.text().catch(() => '');
-        console.error('[razorpay] could not save customer email on order', order.id, patchResponse.status, detail.slice(0, 300));
+        const text = await patchResponse.text().catch(() => '');
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+        // This PATCH is a raw fetch (not routed through readJson), so it never got the
+        // isPostgresPermissionDenied reclassification applied elsewhere in this file — checked
+        // directly here instead, purely to make the log line unambiguous about whether this is
+        // the same missing-service-role-grant condition (fixed by the
+        // 202609190001_service_role_order_personalization_grants.sql migration, which grants
+        // UPDATE on orders) or a genuinely different failure. This PATCH remains best-effort:
+        // its failure is only ever logged, never thrown, so it cannot fail checkout itself —
+        // order creation above already succeeded regardless of what happens here.
+        console.error('[razorpay] could not save customer email on order', order.id, {
+          status: patchResponse.status,
+          likelyMissingServiceRoleGrant: isPostgresPermissionDenied(patchResponse.status, data),
+          detail: text.slice(0, 300),
+        });
       } else {
         order.email = shipping.email;
       }
@@ -302,7 +345,15 @@ export async function finalizeSupabaseOrder({ shipping, items, razorpayOrderId, 
 export function sendError(res, error) {
   const status = error instanceof CheckoutError ? error.status : 500;
   const code = error instanceof CheckoutError ? error.code : 'INTERNAL_ERROR';
-  if (!(error instanceof CheckoutError)) console.error('[razorpay]', error);
+  // Previously only non-CheckoutErrors were logged here, on the theory that a CheckoutError is
+  // an "expected" validation failure with its own safe, descriptive message. In practice that
+  // meant EVERY 409/403/etc from the checkout flow was completely invisible server-side —
+  // Vercel's own access log shows "POST /api/razorpay/create-order -> 409" and nothing else, so
+  // there was no way to tell which of several possible causes fired without this line. The
+  // message on a CheckoutError is already written to be safe to show the customer, so logging it
+  // here (plus the status/code) adds no new exposure — it's the same text the response body
+  // already contains, just also visible in server logs.
+  console.error('[razorpay]', { status, code, message: error?.message, ...(error instanceof CheckoutError ? {} : { stack: error?.stack }) });
   res.status(status).json({ error: status >= 500 ? 'Secure checkout is temporarily unavailable.' : error.message, code });
 }
 
