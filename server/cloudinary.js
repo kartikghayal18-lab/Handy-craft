@@ -8,10 +8,28 @@ import { CheckoutError, requireServerEnv } from './razorpay.js';
 // Razorpay/Supabase/Resend elsewhere in /server. CLOUDINARY_API_SECRET is read only here, on
 // the server, and is used solely to sign upload requests; it never reaches the client.
 
+let configDiagnosticLogged = false;
+
 function cloudinaryConfig() {
   const cloudName = requireServerEnv('CLOUDINARY_CLOUD_NAME');
   const apiKey = requireServerEnv('CLOUDINARY_API_KEY');
   const apiSecret = requireServerEnv('CLOUDINARY_API_SECRET');
+  // Safe, one-time-per-instance diagnostic for a "401 Invalid Signature" report: this never logs
+  // apiSecret's value (only its length, since a stale/rotated/mis-pasted secret is the most
+  // likely cause of a signature mismatch when the signing code itself is correct — a wrong
+  // length is one concrete, checkable symptom of that without exposing anything). cloudName and
+  // the shape of apiKey are not secrets — Cloudinary's own delivery URLs already contain
+  // cloudName in plain text, and api_key is sent unencrypted in every upload request — so
+  // logging them in full (cloudName) or trimmed (apiKey's last 4 digits, the way most dashboards
+  // display key fingerprints) adds no exposure beyond what's already public in every request.
+  if (!configDiagnosticLogged) {
+    configDiagnosticLogged = true;
+    console.log('[cloudinary] config loaded', {
+      cloudName,
+      apiKeyLast4: apiKey.slice(-4),
+      apiSecretLength: apiSecret.length,
+    });
+  }
   return { cloudName, apiKey, apiSecret };
 }
 
@@ -40,7 +58,14 @@ export async function uploadPersonalizationPhoto({ buffer, contentType, orderId,
   const { cloudName, apiKey, apiSecret } = cloudinaryConfig();
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = `forever-handy/personalization/${orderId}/${orderItemId}`;
-  const signature = signParams({ folder, timestamp }, apiSecret);
+  // Every parameter that will be sent to Cloudinary below, OTHER than file/api_key/signature
+  // (which the spec explicitly excludes from signing), must appear here — folder and timestamp
+  // are the only two form fields set below besides those three, so this already matches exactly.
+  // https://cloudinary.com/documentation/upload_images#generating_authentication_signatures
+  const paramsToSign = { folder, timestamp };
+  const signature = signParams(paramsToSign, apiSecret);
+
+  console.log('[personalization-diagnostic] cloudinary upload started', { orderId, orderItemId, contentType, bytes: buffer.length, folder });
 
   const form = new FormData();
   form.set('file', `data:${contentType};base64,${buffer.toString('base64')}`);
@@ -55,9 +80,16 @@ export async function uploadPersonalizationPhoto({ buffer, contentType, orderId,
   });
   const data = await response.json().catch(() => null);
   if (!response.ok || !data?.secure_url) {
-    console.error('[cloudinary] upload failed:', response.status, data?.error?.message || '(no detail)');
+    // Cloudinary's own "Invalid Signature" error message echoes back the exact string it hashed
+    // server-side (e.g. "...String to sign - 'folder=xxx&timestamp=169...'.") — that's safe to
+    // log in full (it contains no secret; it's the same non-secret params sent above) and is the
+    // single most useful piece of evidence for this failure mode: comparing it against
+    // paramsToSign below proves whether our string-to-sign matches what Cloudinary expected, or
+    // whether apiSecret itself (never logged) must be the mismatch.
+    console.error('[cloudinary] upload failed:', response.status, data?.error?.message || '(no detail)', { orderId, orderItemId, paramsToSign });
     throw new CheckoutError('The photo could not be uploaded.', 502, 'CLOUDINARY_UPLOAD_FAILED');
   }
+  console.log('[personalization-diagnostic] cloudinary upload succeeded', { orderId, orderItemId, publicId: data.public_id, hasSecureUrl: Boolean(data.secure_url) });
   return { publicId: data.public_id, secureUrl: data.secure_url, bytes: data.bytes, format: data.format };
 }
 

@@ -22,6 +22,18 @@ function readLocalDevelopmentEnv(name) {
   return '';
 }
 
+// A Vercel env var pasted from a local .env file sometimes carries its surrounding quotes along
+// (".env" syntax allows `KEY="value"`, but Vercel's dashboard stores exactly what's typed into
+// the field, quotes and all — there is no .env-style parsing on that side). That produces a
+// secret whose real bytes are `"actual-secret"` instead of `actual-secret`, which fails any
+// signature check with no other symptom. readLocalDevelopmentEnv above already strips this for
+// local .env files (line above); this applies the identical stripping to process.env, which is
+// the only source that matters once deployed on Vercel. A value with no wrapping quotes is
+// returned unchanged, so this is a no-op for every correctly-set variable.
+function stripWrappingQuotes(value) {
+  return value?.replace(/^(['"])(.*)\1$/, '$2');
+}
+
 export class CheckoutError extends Error {
   constructor(message, status = 400, code = 'CHECKOUT_ERROR') {
     super(message);
@@ -46,8 +58,17 @@ export function isPostgresPermissionDenied(status, data) {
 
 export function requireServerEnv(name, fallbacks = []) {
   for (const key of [name, ...fallbacks]) {
-    const value = readLocalDevelopmentEnv(key) || process.env[key]?.trim();
-    if (value) return value;
+    const local = readLocalDevelopmentEnv(key);
+    if (local) return local;
+    const raw = process.env[key]?.trim();
+    if (raw) {
+      const value = stripWrappingQuotes(raw);
+      // Safe, one-line, no-value diagnostic: proves (or rules out) the "pasted with quotes"
+      // config mistake without ever logging the secret itself — only that stripping changed
+      // something, and by how many characters.
+      if (value !== raw) console.warn('[env] stripped accidental wrapping quotes from', key, `(${raw.length} -> ${value.length} chars)`);
+      return value;
+    }
   }
   throw new CheckoutError(`Server configuration is missing ${name}.`, 500, 'SERVER_CONFIGURATION_ERROR');
 }
