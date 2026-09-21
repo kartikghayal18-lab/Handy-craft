@@ -21,9 +21,37 @@ const categories = ['Birthday', 'Anniversary', 'Love', 'Friendship', 'Raksha Ban
 const rupee = (amount) => `₹${amount.toLocaleString('en-IN')}`;
 const FALLBACK_PRODUCT_IMAGE = '/images/memory-kraft-collection.png';
 const PRODUCT_IMAGE_BUCKET = 'product-images';
-// Matches server/razorpay.js's MAX_FILE_BYTES — kept in sync so a customer finds out a
-// photo is too large at selection time instead of after paying.
-const MAX_PERSONALIZATION_PHOTO_BYTES = 3 * 1024 * 1024;
+// Customer-facing personalization photo collection moved entirely to WhatsApp (post-payment) —
+// the website no longer accepts or uploads photos itself. See buildWhatsAppLink() below and the
+// success screen in Checkout(). CLOUDINARY_* env vars and server/cloudinary.js are untouched
+// (admin/product-asset code elsewhere may still use them); only the website's own upload path
+// (the removed ProductModal upload UI + api/personalization/upload.js) was removed.
+//
+// Client-safe (never secret — a WhatsApp number is meant to be dialed/messaged by anyone) env
+// var, read in exactly this one place so it's never duplicated across files. Accepts the number
+// with or without '+', spaces, or dashes (normalized below) so it can be pasted from anywhere.
+const WHATSAPP_BUSINESS_NUMBER = String(import.meta.env.VITE_WHATSAPP_BUSINESS_NUMBER || '').replace(/[^\d]/g, '');
+
+// Builds the wa.me deep link + pre-filled message shown on the post-payment success screen.
+// wa.me links work identically on iPhone, Android, and WhatsApp Web/Desktop: the OS/browser
+// resolves wa.me/<number>?text=<encoded message> to whichever WhatsApp client is installed, or
+// to web.whatsapp.com if none is. Returns null when WHATSAPP_BUSINESS_NUMBER isn't configured,
+// so the caller can hide the button rather than link to a broken destination.
+function buildWhatsAppLink(order, cart) {
+  if (!WHATSAPP_BUSINESS_NUMBER || !order) return null;
+  const itemLines = (cart || []).map(item => `- ${item.name} x${item.quantity}`).join('\n') || '- (order details)';
+  const paidAmount = rupee(order.total ?? cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
+  const message = [
+    `Hi Forever Handy! I just paid for order ${order.order_number}.`,
+    '',
+    'Order summary:',
+    itemLines,
+    `Paid amount: ${paidAmount}`,
+    '',
+    "I'll send my original/high-quality photos and personalization/gift requirements here.",
+  ].join('\n');
+  return `https://wa.me/${WHATSAPP_BUSINESS_NUMBER}?text=${encodeURIComponent(message)}`;
+}
 
 // Normalizes whatever a product's image field actually holds into a usable <img> src.
 // Handles: a full http(s) URL (returned as-is, never re-resolved), a bucket-relative
@@ -59,6 +87,9 @@ const toStorefrontProduct = product => {
   return { ...product, price: Number(product.sale_price ?? product.price), regularPrice: Number(product.price), type: product.short_description || product.description || 'Personalized gift', badge: product.personalizable ? 'Personalizable' : null, categories: product.product_categories?.map(item=>item.category?.name).filter(Boolean)||[], art: 'bloom', for: [], image: images[0] || FALLBACK_PRODUCT_IMAGE, gallery: images.length ? images : [FALLBACK_PRODUCT_IMAGE] };
 };
 
+// WhatsApp's glyph is solid-fill, unlike the rest of this app's stroke-based Icon() set, so it's
+// its own small component rather than another case in Icon()'s shared stroke styling.
+function WhatsAppGlyph({size=22}){return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.97L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.51 2 12.04 2Zm5.8 14.03c-.24.68-1.4 1.3-1.93 1.38-.5.08-1.12.11-1.8-.11-.42-.13-.95-.3-1.64-.6-2.88-1.24-4.76-4.14-4.9-4.33-.14-.19-1.17-1.56-1.17-2.98 0-1.42.75-2.11 1.01-2.4.27-.29.58-.36.78-.36.19 0 .39 0 .56.01.18.01.42-.07.65.5.24.58.81 2 .88 2.14.07.15.12.32.02.51-.09.19-.14.3-.28.46-.14.16-.29.36-.42.48-.14.14-.28.28-.12.56.16.28.71 1.18 1.53 1.91 1.05.94 1.94 1.24 2.22 1.38.28.14.44.12.61-.07.16-.19.69-.8.87-1.08.19-.28.37-.23.62-.14.26.09 1.65.78 1.93.92.28.14.47.21.54.33.07.12.07.68-.17 1.36Z"/></svg>;}
 function Icon({ name, size = 20 }) {
   const paths = { search: <><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></>, bag: <><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></>, heart: <path d="M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z"/>, menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>, home: <path d="m3 11 9-8 9 8v9H3z"/>, compass: <><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.2 5.4-4.6 1.6 2.2-5.4z"/></>, plus: <><path d="M12 5v14M5 12h14"/></>, close: <path d="M6 6l12 12M18 6 6 18"/>, arrow: <path d="M5 12h14m-6-6 6 6-6 6"/> };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
@@ -375,34 +406,15 @@ function App() {
 }
 
 function ProductModal({product, close, add}) {
-  const [files,setFiles]=useState([]),[note,setNote]=useState(''),[galleryIndex,setGalleryIndex]=useState(0),[quantity,setQuantity]=useState(1),[saved,setSaved]=useState(false),[fileWarning,setFileWarning]=useState('');
-  const selectFiles=event=>{const picked=Array.from(event.target.files||[]);const tooLarge=picked.filter(file=>file.size>MAX_PERSONALIZATION_PHOTO_BYTES);setFiles(picked.filter(file=>file.size<=MAX_PERSONALIZATION_PHOTO_BYTES));setFileWarning(tooLarge.length?`${tooLarge.length} photo${tooLarge.length>1?'s were':' was'} too large (max ${Math.round(MAX_PERSONALIZATION_PHOTO_BYTES/(1024*1024))}MB each) and ${tooLarge.length>1?"weren't":"wasn't"} added.`:'');};
+  const [galleryIndex,setGalleryIndex]=useState(0),[quantity,setQuantity]=useState(1),[saved,setSaved]=useState(false);
   const gallery=product.gallery?.length?product.gallery:[product.image];
   const discount=product.regularPrice>product.price?Math.round((1-product.price/product.regularPrice)*100):0;
   const optionValues=String(product.dimensions||'').split(/[,|]/).map(value=>value.trim()).filter(Boolean);
-  const previews=useMemo(()=>files.map(file=>({name:file.name,url:URL.createObjectURL(file)})),[files]);
-  useEffect(()=>()=>previews.forEach(preview=>URL.revokeObjectURL(preview.url)),[previews]);
   const share=async()=>{if(navigator.share)await navigator.share({title:product.name,url:location.href});else await navigator.clipboard?.writeText(location.href)};
-  return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/>{product.badge&&<span>{product.badge}</span>}<div className="product-image-actions"><button onClick={()=>setSaved(value=>!value)} aria-label="Save product">{saved?'♥':'♡'}</button><button onClick={share} aria-label="Share product">↗</button></div></div><div className="product-gallery-thumbs">{gallery.map((image,index)=><button key={`${image}-${index}`} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Show product photo ${index+1}`}><img src={image} alt=""/></button>)}</div><div className="product-gallery-dots">{gallery.map((_,index)=><button key={index} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Photo ${index+1}`}/>)}</div></div><div className="product-details"><p className="eyebrow">{product.categories?.[0]||'Thoughtful gift'}</p><h2>{product.name}</h2><div className="product-price-line"><strong className="modal-price">{rupee(product.price)}</strong>{discount>0&&<><s>{rupee(product.regularPrice)}</s><small>{discount}% off</small></>}</div><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="product-feature-badges"><span>♡ {product.personalizable?'Personalizable':'Thoughtfully made'}</span><span>✓ High quality</span><span>✦ Perfect gift</span></div>{optionValues.length>0&&<fieldset className="product-options"><legend>Select size</legend>{optionValues.map(value=><label key={value}><input type="radio" name="product-size" value={value}/><span>{value}</span></label>)}</fieldset>}<div className="product-quantity"><span>Quantity</span><div><button onClick={()=>setQuantity(value=>Math.max(1,value-1))} aria-label="Decrease quantity">−</button><b>{quantity}</b><button onClick={()=>setQuantity(value=>value+1)} aria-label="Increase quantity">+</button></div></div>{product.personalizable&&<div className="personalization-panel"><div className="personalization-heading"><div><p className="eyebrow">Personalize your gift</p><h3>Add your memories</h3></div><span>Optional</span></div><label className="upload upload-zone"><input type="file" accept="image/*" multiple onChange={selectFiles}/><Icon name="plus"/><span><b>Choose photos</b><small>Add the memories this product supports.</small></span></label>{fileWarning&&<p className="form-error">{fileWarning}</p>}{previews.length>0&&<div className="upload-previews">{previews.map((preview,index)=><PolaroidPhoto key={preview.url} image={preview.url} alt={`Selected photo ${index+1}`} size="sm" rotation={`${index%2?4:-4}deg`}/>)}</div>}<label className="text-field">A note for them <input value={note} onChange={event=>setNote(event.target.value)} placeholder="Write something from the heart"/></label></div>}<div className="product-info-accordions"><details open><summary>Delivery information</summary><p>{product.delivery_information||'Delivery availability and timing are confirmed at checkout.'}</p></details><details><summary>Perfect for</summary><p>{product.categories?.join(', ')||'Thoughtful gifting moments.'}</p></details></div><div className="product-sticky-actions"><button className="secondary" onClick={()=>add({photoCount:files.length,note:note.trim(),files},quantity)}>Buy now</button><button className="primary" onClick={()=>add({photoCount:files.length,note:note.trim(),files},quantity)}>Add to cart · {rupee(product.price*quantity)}</button></div></div></div></div>;
+  return <div className="overlay product-overlay" role="dialog" aria-modal="true" aria-label={product.name}><div className="product-modal"><button className="modal-close" onClick={close} aria-label="Close product details"><Icon name="close"/></button><div className="product-gallery"><div className="product-main-image"><img src={gallery[galleryIndex]} alt={`${product.name} product view`}/>{product.badge&&<span>{product.badge}</span>}<div className="product-image-actions"><button onClick={()=>setSaved(value=>!value)} aria-label="Save product">{saved?'♥':'♡'}</button><button onClick={share} aria-label="Share product">↗</button></div></div><div className="product-gallery-thumbs">{gallery.map((image,index)=><button key={`${image}-${index}`} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Show product photo ${index+1}`}><img src={image} alt=""/></button>)}</div><div className="product-gallery-dots">{gallery.map((_,index)=><button key={index} className={galleryIndex===index?'is-active':''} onClick={()=>setGalleryIndex(index)} aria-label={`Photo ${index+1}`}/>)}</div></div><div className="product-details"><p className="eyebrow">{product.categories?.[0]||'Thoughtful gift'}</p><h2>{product.name}</h2><div className="product-price-line"><strong className="modal-price">{rupee(product.price)}</strong>{discount>0&&<><s>{rupee(product.regularPrice)}</s><small>{discount}% off</small></>}</div><p className="product-description">{product.type}. Made from your moments, with the details that make it theirs.</p><div className="product-feature-badges"><span>♡ {product.personalizable?'Personalizable':'Thoughtfully made'}</span><span>✓ High quality</span><span>✦ Perfect gift</span></div>{optionValues.length>0&&<fieldset className="product-options"><legend>Select size</legend>{optionValues.map(value=><label key={value}><input type="radio" name="product-size" value={value}/><span>{value}</span></label>)}</fieldset>}<div className="product-quantity"><span>Quantity</span><div><button onClick={()=>setQuantity(value=>Math.max(1,value-1))} aria-label="Decrease quantity">−</button><b>{quantity}</b><button onClick={()=>setQuantity(value=>value+1)} aria-label="Increase quantity">+</button></div></div>{product.personalizable&&<div className="personalization-notice"><Icon name="heart"/><div><strong>Personalize after checkout</strong><p>Once your payment is confirmed, we'll show you a WhatsApp button to send your photos and personalization details directly.</p></div></div>}<div className="product-info-accordions"><details open><summary>Delivery information</summary><p>{product.delivery_information||'Delivery availability and timing are confirmed at checkout.'}</p></details><details><summary>Perfect for</summary><p>{product.categories?.join(', ')||'Thoughtful gifting moments.'}</p></details></div><div className="product-sticky-actions"><button className="secondary" onClick={()=>add(null,quantity)}>Buy now</button><button className="primary" onClick={()=>add(null,quantity)}>Add to cart · {rupee(product.price*quantity)}</button></div></div></div></div>;
 }
 function CartDrawer({cart, total, close, checkout, remove, changeQuantity}) { return <div className="overlay cart-overlay" role="dialog" aria-modal="true" aria-label="Cart"><aside className="cart-drawer"><div className="cart-head"><div><p className="eyebrow">Ready when you are</p><h2>Your gift bag</h2></div><button onClick={close} aria-label="Close cart"><Icon name="close"/></button></div>{cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><ProductArt kind={item.art} image={item.image}/><div className="cart-item-copy"><h3>{item.name}</h3><p>{item.type}</p>{item.customization && <small>{item.customization.photoCount ? `${item.customization.photoCount} personal photo${item.customization.photoCount > 1 ? 's' : ''}` : 'No photos selected'}{item.customization.note ? ' · personal note added' : ''}</small>}<div className="cart-line-bottom"><div className="quantity-control" aria-label={`Quantity for ${item.name}`}><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Decrease quantity of ${item.name}`}>−</button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Increase quantity of ${item.name}`}>+</button></div><strong>{rupee(item.price * item.quantity)}</strong></div></div><button className="remove-item" onClick={() => remove(item.id)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><strong>{rupee(total)}</strong></p><small>Secure checkout powered by Razorpay.</small><button className="primary full" onClick={checkout}>Checkout <Icon name="arrow"/></button></div></> : <div className="empty-cart"><span>♡</span><h3>Your bag is waiting for a memory.</h3><button className="primary" onClick={close}>Explore gifts</button></div>}</aside></div> }
 
-const fileToBase64=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file);});
-// Uploads any personalization photos attached to cart items, one product at a time, to the
-// order that payment was just confirmed for. Called only after the order already exists and
-// is paid — a failed or partial upload here never affects the order itself, so it is always
-// fire-and-forget from the caller's perspective (errors are logged, never thrown outward).
-async function uploadPersonalizationPhotos(orderId,cart){
-  if(!orderId)return;
-  const itemsWithPhotos=cart.filter(item=>item.customization?.files?.length);
-  for(const item of itemsWithPhotos){
-    try{
-      const files=await Promise.all(item.customization.files.map(async file=>({filename:file.name,contentType:file.type,dataBase64:await fileToBase64(file)})));
-      const response=await fetch('/api/personalization/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_id:orderId,product_id:item.id,files})});
-      if(!response.ok){const data=await response.json().catch(()=>({}));console.error('[personalization] upload failed for',item.name,data.error||response.status);}
-    }catch(err){console.error('[personalization] could not upload photos for',item.name,err);}
-  }
-}
 function Checkout({cart, close, complete}) {
   const [form,setForm]=useState({name:'',phone:'',email:'',address:'',city:'',state:'',postal_code:''});
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[order,setOrder]=useState(null);
@@ -415,8 +427,11 @@ function Checkout({cart, close, complete}) {
     const verified=await verifyPayment(payload);
     if(!verified.verified||!verified.order)throw new Error('Payment could not be verified.');
     pendingVerification.current=null;
+    // Payment is now verified and the order is PAID (finalizeSupabaseOrder only returns a row
+    // for a payment Razorpay has confirmed as captured — see server/razorpay.js). Setting
+    // `order` here is the single gate for the success screen below: it is never set for an
+    // unpaid, cancelled, or failed payment, so the WhatsApp CTA can never show before that.
     setOrder(verified.order);
-    uploadPersonalizationPhotos(verified.order.id,cart).catch(err=>console.error('[personalization] upload failed',err));
   };
   const place=async event=>{
     event.preventDefault();
@@ -476,7 +491,25 @@ function Checkout({cart, close, complete}) {
       setBusy(false);
     }
   };
-  if(order)return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="checkout-shell checkout-success"><span className="checkout-success-check">✓</span><p className="eyebrow">Payment successful</p><h2>Order placed successfully.</h2><p>Your order ID is <b>{order.order_number}</b>. Your keepsake is now being prepared.</p><button className="primary full" onClick={complete}>Continue shopping</button></div></div>;
+  if(order){
+    const whatsappLink=buildWhatsAppLink(order,cart);
+    const paidAmount=rupee(order.total??cart.reduce((sum,item)=>sum+item.price*item.quantity,0));
+    return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="checkout-shell checkout-success"><span className="checkout-success-check">✓</span><p className="eyebrow">Payment successful</p><h2>Order placed successfully.</h2><p>Your order ID is <b>{order.order_number}</b>. Your keepsake is now being prepared.</p>
+      <div className="order-summary-card">
+        <div className="order-summary-row"><span>Order number</span><b>{order.order_number}</b></div>
+        <div className="order-summary-row"><span>Payment status</span><b className="order-summary-paid"><Icon name="heart"/> Paid</b></div>
+        <div className="order-summary-items">{cart.map(item=><div key={item.id} className="order-summary-item"><span>{item.name} × {item.quantity}</span><b>{rupee(item.price*item.quantity)}</b></div>)}</div>
+        <div className="order-summary-row order-summary-total"><span>Total paid</span><b>{paidAmount}</b></div>
+      </div>
+      {whatsappLink
+        ? <a className="whatsapp-cta" href={whatsappLink} target="_blank" rel="noopener noreferrer">
+            <WhatsAppGlyph/>
+            <span><b>Send Photos & Requirements on WhatsApp</b><small>Share your original photos and personalization details with us</small></span>
+          </a>
+        : <div className="checkout-warning whatsapp-cta-missing"><strong>WhatsApp isn't configured yet.</strong><p>Please reply to your order confirmation email with your photos and personalization requirements.</p></div>}
+      <button className="primary full" onClick={complete}>Continue shopping</button>
+    </div></div>;
+  }
   const payLabel=pendingVerification.current?'Retry payment verification':`Pay ${rupee(cart.reduce((sum,item)=>sum+item.price*item.quantity,0))} Securely`;
   return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="checkout-shell"><div className="checkout-steps" aria-label="Checkout progress">{['Delivery','Payment','Review','Order'].map((step,index)=><span className={index===0?'active':''} key={step}><b>{index+1}</b>{step}</span>)}</div><div className="checkout-heading"><p className="eyebrow">Secure checkout</p><h2>Delivery details</h2><p>We'll use this address to deliver your order safely.</p></div><div className="address-pills">{['Home','Work','Other'].map(type=><button type="button" className={addressType===type?'active':''} onClick={()=>setAddressType(type)} key={type}>{type}</button>)}</div><form className="checkout-form" onSubmit={place}><label className="text-field"><span>Full name</span><input required autoComplete="name" value={form.name} onChange={e=>set('name',e.target.value)}/></label><label className="text-field"><span>Phone number</span><input required inputMode="tel" autoComplete="tel" value={form.phone} onChange={e=>set('phone',e.target.value)}/></label><label className="text-field"><span>Email</span><input required type="email" autoComplete="email" value={form.email} onChange={e=>set('email',e.target.value)}/></label><label className="text-field checkout-wide"><span>Address</span><input required autoComplete="street-address" value={form.address} onChange={e=>set('address',e.target.value)}/></label><label className="text-field"><span>City</span><input required autoComplete="address-level2" value={form.city} onChange={e=>set('city',e.target.value)}/></label><label className="text-field"><span>State</span><input required autoComplete="address-level1" value={form.state} onChange={e=>set('state',e.target.value)}/></label><label className="text-field checkout-wide"><span>Pincode</span><input required inputMode="numeric" autoComplete="postal-code" pattern="[0-9]{6}" value={form.postal_code} onChange={e=>set('postal_code',e.target.value)}/></label><label className="save-address checkout-wide"><input type="checkbox" checked={saveAddress} onChange={event=>setSaveAddress(event.target.checked)}/><i/><span>Save this address for future orders</span></label><div className="checkout-care checkout-wide"><span>♡</span><div><strong>Almost there!</strong><p>Your items will be packed with care and delivered soon.</p></div></div>{error&&<div className="checkout-warning checkout-wide" role="alert"><strong>{error.startsWith('Payment was cancelled')?'Payment cancelled':'Payment update'}</strong><p>{error}</p></div>}<button className="primary full checkout-wide" disabled={busy}>{busy?'Preparing secure payment…':payLabel} <Icon name="arrow"/></button><p className="checkout-security checkout-wide">▣ 100% Secure Checkout</p><button type="button" className="text-link checkout-wide" disabled={busy} onClick={close}>Back to cart</button></form></div></div>;
 }
