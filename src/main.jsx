@@ -27,18 +27,24 @@ const PRODUCT_IMAGE_BUCKET = 'product-images';
 // (admin/product-asset code elsewhere may still use them); only the website's own upload path
 // (the removed ProductModal upload UI + api/personalization/upload.js) was removed.
 //
-// Client-safe (never secret — a WhatsApp number is meant to be dialed/messaged by anyone) env
-// var, read in exactly this one place so it's never duplicated across files. Accepts the number
-// with or without '+', spaces, or dashes (normalized below) so it can be pasted from anywhere.
-const WHATSAPP_BUSINESS_NUMBER = String(import.meta.env.VITE_WHATSAPP_BUSINESS_NUMBER || '').replace(/[^\d]/g, '');
+// The WhatsApp number is NOT read from a client-side/Vite env var here. It comes from
+// WHATSAPP_BUSINESS_NUMBER on the server (server/razorpay.js -> getWhatsAppBusinessNumber()),
+// returned as an already-normalized, digits-only string in the /api/razorpay/verify-payment
+// response (see verifyAndStore in Checkout() below). That keeps the env var name/value entirely
+// server-side, per the deployment's actual Vercel config, while still letting the browser build
+// the wa.me link with only the safe, non-secret digits it needs.
 
 // Builds the wa.me deep link + pre-filled message shown on the post-payment success screen.
 // wa.me links work identically on iPhone, Android, and WhatsApp Web/Desktop: the OS/browser
 // resolves wa.me/<number>?text=<encoded message> to whichever WhatsApp client is installed, or
-// to web.whatsapp.com if none is. Returns null when WHATSAPP_BUSINESS_NUMBER isn't configured,
-// so the caller can hide the button rather than link to a broken destination.
-function buildWhatsAppLink(order, cart) {
-  if (!WHATSAPP_BUSINESS_NUMBER || !order) return null;
+// to web.whatsapp.com if none is. `whatsappNumber` is the already-normalized digits-only number
+// from the server; normalized again here (defense in depth, and to tolerate a raw value from
+// older cached responses) by stripping anything that isn't a digit. Returns null when no number
+// is configured or there's no verified order, so the caller can hide the button rather than link
+// to a broken destination.
+function buildWhatsAppLink(order, cart, whatsappNumber) {
+  const number = String(whatsappNumber || '').replace(/[^\d]/g, '');
+  if (!number || !order) return null;
   const itemLines = (cart || []).map(item => `- ${item.name} x${item.quantity}`).join('\n') || '- (order details)';
   const paidAmount = rupee(order.total ?? cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const message = [
@@ -50,7 +56,7 @@ function buildWhatsAppLink(order, cart) {
     '',
     "I'll send my original/high-quality photos and personalization/gift requirements here.",
   ].join('\n');
-  return `https://wa.me/${WHATSAPP_BUSINESS_NUMBER}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 
 // Normalizes whatever a product's image field actually holds into a usable <img> src.
@@ -418,6 +424,7 @@ function CartDrawer({cart, total, close, checkout, remove, changeQuantity}) { re
 function Checkout({cart, close, complete}) {
   const [form,setForm]=useState({name:'',phone:'',email:'',address:'',city:'',state:'',postal_code:''});
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[order,setOrder]=useState(null);
+  const [whatsappNumber,setWhatsappNumber]=useState('');
   const [addressType,setAddressType]=useState('Home'),[saveAddress,setSaveAddress]=useState(false);
   const paymentInProgress=useRef(false);
   const pendingVerification=useRef(null);
@@ -431,6 +438,9 @@ function Checkout({cart, close, complete}) {
     // for a payment Razorpay has confirmed as captured — see server/razorpay.js). Setting
     // `order` here is the single gate for the success screen below: it is never set for an
     // unpaid, cancelled, or failed payment, so the WhatsApp CTA can never show before that.
+    // verified.whatsappNumber is the WHATSAPP_BUSINESS_NUMBER env var, read server-side and
+    // already normalized to digits-only by getWhatsAppBusinessNumber() — never a client env var.
+    setWhatsappNumber(verified.whatsappNumber || '');
     setOrder(verified.order);
   };
   const place=async event=>{
@@ -492,7 +502,7 @@ function Checkout({cart, close, complete}) {
     }
   };
   if(order){
-    const whatsappLink=buildWhatsAppLink(order,cart);
+    const whatsappLink=buildWhatsAppLink(order,cart,whatsappNumber);
     const paidAmount=rupee(order.total??cart.reduce((sum,item)=>sum+item.price*item.quantity,0));
     return <div className="overlay product-overlay" role="dialog" aria-modal="true"><div className="checkout-shell checkout-success"><span className="checkout-success-check">✓</span><p className="eyebrow">Payment successful</p><h2>Order placed successfully.</h2><p>Your order ID is <b>{order.order_number}</b>. Your keepsake is now being prepared.</p>
       <div className="order-summary-card">

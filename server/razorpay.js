@@ -56,6 +56,27 @@ export function isPostgresPermissionDenied(status, data) {
   return status === 403 && (data?.code === '42501' || /permission denied for table/i.test(data?.message || ''));
 }
 
+// WhatsApp business number for the post-payment "send photos" CTA (src/main.jsx). Read
+// server-side from the deployment's actual env var name, WHATSAPP_BUSINESS_NUMBER (no VITE_
+// prefix — it is intentionally NOT a client-bundled Vite var), normalized to digits-only (wa.me
+// links require e.g. "+91 98765 43210" -> "919876543210"), and never thrown on if missing: the
+// WhatsApp CTA is optional (the success screen falls back to the order-confirmation email when
+// this is unset), so a missing/misconfigured number must never turn payment verification itself
+// into an error. A WhatsApp number isn't a secret, but it still isn't logged in full — only its
+// digit count and last 2 digits, enough to confirm against the dashboard without echoing it.
+let whatsappNumberDiagnosticLogged = false;
+export function getWhatsAppBusinessNumber() {
+  const local = readLocalDevelopmentEnv('WHATSAPP_BUSINESS_NUMBER');
+  const raw = local || process.env.WHATSAPP_BUSINESS_NUMBER?.trim() || '';
+  if (!raw) return '';
+  const digits = stripWrappingQuotes(raw.trim()).replace(/[^\d]/g, '');
+  if (!whatsappNumberDiagnosticLogged) {
+    whatsappNumberDiagnosticLogged = true;
+    console.log('[whatsapp] WHATSAPP_BUSINESS_NUMBER read server-side', { digitCount: digits.length, last2: digits.slice(-2) });
+  }
+  return digits;
+}
+
 export function requireServerEnv(name, fallbacks = []) {
   for (const key of [name, ...fallbacks]) {
     const local = readLocalDevelopmentEnv(key);

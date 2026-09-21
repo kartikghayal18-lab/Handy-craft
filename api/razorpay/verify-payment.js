@@ -1,4 +1,4 @@
-import { CheckoutError, allowPost, fetchRazorpayPayment, finalizeSupabaseOrder, parseBody, sendError, verifyCheckoutToken, verifyPaymentSignature } from '../../server/razorpay.js';
+import { CheckoutError, allowPost, fetchRazorpayPayment, finalizeSupabaseOrder, getWhatsAppBusinessNumber, parseBody, sendError, verifyCheckoutToken, verifyPaymentSignature } from '../../server/razorpay.js';
 import { sendOrderConfirmationEmail } from '../../server/email.js';
 import { getOrderForNotification } from '../../server/orders.js';
 
@@ -74,7 +74,12 @@ export default async function handler(req, res) {
       });
     }
 
-    res.status(200).json({ verified: true, order });
+    // whatsappNumber is read server-side from WHATSAPP_BUSINESS_NUMBER (never the client-bundled
+    // VITE_ namespace) and is already normalized to digits-only — the frontend uses it as-is to
+    // build the wa.me link, it never reads any WhatsApp env var itself. Empty string (not thrown)
+    // when unconfigured, so the frontend can hide the CTA instead of crashing or blocking a
+    // successful, already-verified payment.
+    res.status(200).json({ verified: true, order, whatsappNumber: getWhatsAppBusinessNumber() });
   } catch (error) {
     sendError(res, error);
   }
