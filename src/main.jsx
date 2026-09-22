@@ -9,6 +9,7 @@ import { EditorialImageBlock, GiftTag, PaperNote, PhotoStack, PhotoStrip, Polaro
 import './homepage.css';
 import './scroll-effects.css';
 import './product-experience.css';
+import './how-to-order.css';
 import './categories.css';
 import './qa.css';
 import './mobile-storefront.css';
@@ -201,6 +202,66 @@ function CategoryPage({ products, catalogState, retry, count, favourites, onFavo
 const marqueeItems = ['Handcrafted with love', 'Ships across India', 'Free personalization', 'Made to order, never mass produced'];
 function Marquee() { return <div className="mk-marquee" aria-hidden="true"><div className="mk-marquee-track">{[...marqueeItems, ...marqueeItems].map((item, index) => <span key={index}>{item}</span>)}</div></div>; }
 function TrustStrip() { return <div className="trust-strip"><div><Icon name="heart" size={16}/><span>Handmade to order — <b>not mass produced</b></span></div><div><Icon name="bag" size={16}/><span>Ships <b>across India</b></span></div><div><Icon name="plus" size={16}/><span><b>Free</b> personalization on every gift</span></div><div><Icon name="compass" size={16}/><span>Packed with care, <b>ready to gift</b></span></div></div>; }
+
+const HOW_TO_ORDER_STEPS = [
+  { title: 'Choose your favourite product', desc: 'Select the size, quantity and product options you want.' },
+  { title: 'Place your order', desc: 'Add the product to your cart and complete your payment securely.' },
+  { title: 'Send your photos on WhatsApp', desc: 'After payment, continue to WhatsApp and send your high-quality photos along with your Order ID and personalization requirements.' },
+  { title: 'We create & deliver', desc: 'Our team prepares your personalized product and delivers it to your doorstep.' },
+];
+const HOW_TO_ORDER_GUIDELINES = [
+  'Send photos in the highest quality possible',
+  'Include your Order ID with the photos',
+  'Mention any personalization/customization requirements',
+  "We'll confirm once your order is received",
+];
+
+// Informational, pre-purchase "How to Order" section — distinct from the post-payment WhatsApp
+// CTA in Checkout()'s success screen (src/main.jsx's buildWhatsAppLink), which is order-specific
+// and only ever shown after a verified payment. This one is generic (no order yet to reference),
+// so it fetches the same server-normalized number from the small public /api/config/whatsapp-
+// number endpoint (server/razorpay.js -> getWhatsAppBusinessNumber(), the one place
+// WHATSAPP_BUSINESS_NUMBER is ever read) rather than duplicating or hardcoding a number here.
+// Hidden entirely — not shown with a broken link — when the server has none configured.
+function HowToOrder() {
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/config/whatsapp-number')
+      .then(response => response.json())
+      .then(data => { if (!cancelled) setWhatsappNumber(String(data?.whatsappNumber || '').replace(/[^\d]/g, '')); })
+      .catch(() => {}); // CTA simply stays hidden if this fails — never blocks the rest of the page
+    return () => { cancelled = true; };
+  }, []);
+  const whatsappLink = whatsappNumber
+    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Hi Forever Handy! I'd like to know more about placing a personalized order.")}`
+    : null;
+  return (
+    <section className="how-to-order section" id="how-to-order" aria-labelledby="how-to-order-heading">
+      <div className="section-head how-to-order-head">
+        <p className="eyebrow">How it works</p>
+        <h2 id="how-to-order-heading">How to Order</h2>
+        <p className="how-to-order-tagline">Your memories, made personal.</p>
+      </div>
+      <div className="how-to-order-body">
+        <div className="steps how-to-order-steps">
+          {HOW_TO_ORDER_STEPS.map((step, index) => (
+            <div key={step.title}><span>{String(index + 1).padStart(2, '0')}</span><h3>{step.title}</h3><p>{step.desc}</p></div>
+          ))}
+        </div>
+        <div className="how-to-order-side">
+          {whatsappLink
+            ? <a className="primary how-to-order-cta" href={whatsappLink} target="_blank" rel="noopener noreferrer"><WhatsAppGlyph size={18}/>Send Your Photos on WhatsApp <Icon name="arrow"/></a>
+            : null}
+          <div className="how-to-order-guidelines">
+            <strong>Photo Guidelines</strong>
+            <ul>{HOW_TO_ORDER_GUIDELINES.map(item => <li key={item}>{item}</li>)}</ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 function useScrolled(threshold = 12) { const [scrolled, setScrolled] = useState(false); useEffect(() => { const onScroll = () => setScrolled(window.scrollY > threshold); onScroll(); window.addEventListener('scroll', onScroll, { passive: true }); return () => window.removeEventListener('scroll', onScroll); }, [threshold]); return scrolled; }
 function ScrollProgress() { const [width, setWidth] = useState(0); useEffect(() => { const onScroll = () => { const doc = document.documentElement; const max = doc.scrollHeight - doc.clientHeight; setWidth(max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0); }; onScroll(); window.addEventListener('scroll', onScroll, { passive: true }); return () => window.removeEventListener('scroll', onScroll); }, []); return <div className="scroll-progress" style={{ width: `${width}%` }}/>; }
 function useDragScroll(selector) {
@@ -386,6 +447,7 @@ function App() {
   <main id="top"><section className="mobile-hero"><img src="/images/memory-kraft-hero.png" alt="Handmade Forever Handy personalized gift"/><div><p className="eyebrow">Personalized gifting</p><h1>Made from the moments you <i>love.</i></h1><p>Handmade keepsakes for the people who mean everything.</p><button className="primary" onClick={goProducts}>Shop now <Icon name="arrow"/></button></div></section><section className="hero"><div className="hero-copy"><p className="eyebrow">Personalized gifting, made tenderly</p><h1>Make your memories <i>worth keeping.</i></h1><p className="lede">Personalized gifts made from your favourite moments, for the people who mean everything.</p><div className="hero-actions"><button className="primary" onClick={goProducts}>Create a gift <Icon name="arrow"/></button><button className="text-link" onClick={goProducts}>Explore gifts</button></div><p className="shipping">Handmade with care · Ships across India</p></div><GiftScene/></section>
   <StoreCategoryRail products={catalogProducts}/>
   <TrustStrip/>
+  <HowToOrder/>
   <section className="occasions section" id="occasions" data-scroll-scene><div className="section-head scene-piece"><p className="eyebrow">Gift by feeling</p><h2>Who are you gifting for?</h2></div><div className={`occasion-rail ${selectedOccasion ? 'has-selection' : ''}`}>{mobileCategoryItems.map((category,index) => <OccasionScene key={category} name={category} index={index} selected={selectedOccasion === category} onClick={() => selectOccasion(category)}/>)}</div></section>
   {!catalogState.loading && carouselItems.length >= 2 && (
     <CoverFlowCarousel
