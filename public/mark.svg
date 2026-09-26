@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Forever Handy">
+  <g fill="none" stroke="#2b2420" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="13" width="22" height="15" rx="1.5" fill="#f3dcd4"/>
+    <path d="M3.5 9.5h25v3.5h-25z" fill="#fbf4ee"/>
+    <path d="M16 9.5V28"/>
+    <path d="M16 9.5c-1.6-4.2-6.4-4.6-6.2-2 .2 2.1 4.1 2 6.2 2Zm0 0c1.6-4.2 6.4-4.6 6.2-2-.2 2.1-4.1 2-6.2 2Z" fill="#fbf4ee"/>
+  </g>
+  <path d="M21.5 18.2c-.9-1.5-3.2-.8-2.8.9.3 1.2 2.8 2.9 2.8 2.9s2.5-1.7 2.8-2.9c.4-1.7-1.9-2.4-2.8-.9Z" fill="#9b4f45"/>
+</svg>

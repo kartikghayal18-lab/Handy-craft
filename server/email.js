@@ -106,6 +106,8 @@ async function sendEmail({ to, subject, html }) {
 const STATUS_LABELS = {
   pending: 'Pending',
   confirmed: 'Confirmed',
+  customization_pending: 'Awaiting your personalization details',
+  customization_received: 'Personalization details received',
   preparing: 'Processing',
   ready: 'Ready',
   shipped: 'Shipped',
@@ -125,6 +127,8 @@ function statusMessage(status, orderNumber) {
   const id = escapeHtml(orderNumber);
   switch (status) {
     case 'confirmed': return `Your Forever Handy order #${id} has been confirmed.`;
+    case 'customization_pending': return `We're ready to personalize your order #${id}. Please send your photos and details on WhatsApp.`;
+    case 'customization_received': return `Thank you! We've received the personalization details for order #${id}.`;
     case 'preparing': return `Your order #${id} is now being processed.`;
     case 'shipped': return `Your order #${id} has been shipped.`;
     case 'delivered': return `Your order #${id} has been completed.`;

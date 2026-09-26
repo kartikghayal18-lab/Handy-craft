@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Sign in · Forever Handy Admin</title>
+  <meta name="theme-color" content="#f8f1ea" />
+  <link rel="icon" href="/mark.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Jost:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="/admin/static/admin.css" />
+  <script src="/admin/static/login.js" type="module"></script>
+</head>
+<body class="login-page">
+  <main class="login">
+    <img class="login__branch" src="/images/branch-corner.webp" alt="" width="470" height="600" />
+    <div class="login__card">
+      <div class="brand brand--admin">
+        <img class="brand__logo" src="/mark.svg" alt="" width="34" height="34" />
+        <span><span class="brand__name">Forever Handy</span><span class="brand__tag">Studio admin</span></span>
+      </div>
+      <h1 class="login__title">Welcome <em>back</em></h1>
+      <p class="login__sub">Sign in to manage your store.</p>
+      <form class="login__form" data-login novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+        </div>
+        <p class="form-error" data-error role="alert" hidden></p>
+        <p class="login__note" data-denied hidden>That account isn’t an admin. Sign in with the store’s admin account.</p>
+        <button class="btn btn--primary btn--block" type="submit">Sign in</button>
+      </form>
+      <a class="login__back" href="/">← Back to the shop</a>
+    </div>
+  </main>
+</body>
+</html>
