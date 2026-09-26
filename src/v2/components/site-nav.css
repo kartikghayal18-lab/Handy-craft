@@ -1,0 +1,32 @@
+.site-nav{position:fixed;inset:0 0 auto;z-index:50;transition:background-color .5s var(--ease),box-shadow .5s var(--ease)}
+.site-nav::after{content:'';position:absolute;left:var(--gutter);right:var(--gutter);bottom:0;height:1px;background:var(--line);transition:opacity .5s var(--ease)}
+.site-nav.is-scrolled{background:rgba(248,241,234,.96);box-shadow:0 1px 0 var(--line)}
+.site-nav.is-scrolled::after{opacity:0}
+.site-nav-inner{height:var(--nav-h);max-width:1360px;margin:0 auto;padding:0 var(--gutter);display:flex;align-items:center;gap:40px}
+.brand{display:inline-flex;align-items:center;gap:10px;font-family:var(--serif);font-size:23px;font-weight:500;letter-spacing:-.015em;white-space:nowrap}
+.brand img{width:30px;height:30px}
+.nav-links{display:flex;gap:38px;margin:0 auto;font-size:14.5px;color:var(--ink-soft)}
+.nav-links a{position:relative;padding:6px 0;transition:color .3s var(--ease)}
+.nav-links a::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .45s var(--ease)}
+.nav-links a:hover{color:var(--ink)}
+.nav-links a:hover::after,.nav-links a[aria-current=page]::after{transform:scaleX(1)}
+.nav-links a[aria-current=page]{color:var(--ink)}
+.nav-actions{display:flex;align-items:center;gap:6px}
+.nav-icon{position:relative;display:grid;place-items:center;width:42px;height:42px;border-radius:50%;color:var(--ink);transition:background-color .3s var(--ease)}
+.nav-icon:hover{background:rgba(43,36,32,.05)}
+.nav-bag span{position:absolute;top:5px;right:4px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--rose-deep);color:#fff;font-size:9.5px;font-weight:500;line-height:16px;text-align:center}
+.nav-menu{display:none}
+.nav-sheet{display:none}
+
+@media (max-width:900px){
+  :root{--nav-h:62px}
+  .site-nav-inner{gap:4px}
+  .nav-links,.nav-search{display:none}
+  .nav-menu{display:grid;margin-left:-10px}
+  .brand{font-size:20px;margin-right:auto}
+  .brand img{width:26px;height:26px}
+  .nav-actions{gap:0;margin-right:-8px}
+  .nav-sheet{display:flex;flex-direction:column;padding:6px var(--gutter) 18px;background:var(--ivory);border-bottom:1px solid var(--line)}
+  .nav-sheet a{padding:13px 0;font-family:var(--serif);font-size:22px;border-bottom:1px solid var(--line)}
+  .nav-sheet a:last-child{border-bottom:0}
+}

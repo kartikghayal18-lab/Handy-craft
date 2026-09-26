@@ -1,0 +1,8 @@
+/* Shared by every page with falling petals: they pass in front of everything but the nav. */
+.petal-layer{position:fixed;inset:0;z-index:40;pointer-events:none;overflow:hidden}
+.petal{position:absolute;top:-8px;left:-8px;opacity:0;will-change:transform,opacity;transform-origin:50% 60%;backface-visibility:visible;filter:drop-shadow(0 3px 3px rgba(80,50,40,.1))}
+.petal-near{filter:blur(2px)}
+.petal-far{filter:blur(.35px) saturate(.85)}
+.petal-flower{transform-origin:50% 50%}
+/* The page-wide fall sits just behind the scene petals, still in front of the content */
+.ambient-petals .petal-layer{z-index:39}

@@ -1,0 +1,50 @@
+/* Forever Handy v2 — palette sampled from the studio photograph: plaster, stone, blush petals, walnut, charcoal ink. */
+:root{
+  --ivory:#f8f1ea;
+  --plaster:#f2e9e0;
+  --stone:#e9ddd0;
+  --ink:#2b2420;
+  --ink-soft:#5f534b;
+  --ink-faint:#8d8077;
+  --rose:#9b4f45;
+  --rose-deep:#7f3f37;
+  --blush:#edc9c3;
+  --line:rgba(43,36,32,.13);
+  --line-strong:rgba(43,36,32,.24);
+  --ease:cubic-bezier(.16,1,.3,1);
+  --serif:'Fraunces',Georgia,serif;
+  --sans:'Jost',system-ui,sans-serif;
+  --gutter:clamp(18px,4vw,56px);
+  --nav-h:72px;
+  color:var(--ink);
+  background:var(--ivory);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--ivory);overflow-x:clip}
+img{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--rose);outline-offset:3px;border-radius:4px}
+
+.button{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:50px;padding:0 28px;border-radius:999px;font-size:15.5px;font-weight:400;letter-spacing:.01em;transition:background-color .35s var(--ease),color .35s var(--ease),border-color .35s var(--ease)}
+.button svg{transition:transform .35s var(--ease)}
+.button:hover svg{transform:translateX(3px)}
+.button-primary{background:var(--rose-deep);color:#fff8f3;box-shadow:0 10px 22px -12px rgba(127,63,55,.65)}
+.button-primary:hover{background:#6b342d}
+.button-quiet{border:1px solid var(--line-strong);color:var(--ink)}
+.button-quiet:hover{border-color:var(--ink);background:rgba(255,255,255,.4)}
+
+.eyebrow{margin:0;font-size:11px;font-weight:500;letter-spacing:.26em;text-transform:uppercase;color:var(--rose)}
+
+.not-built{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:var(--nav-h) var(--gutter) 40px;text-align:center}
+.not-built h1{margin:0;font-family:var(--serif);font-weight:500;font-size:clamp(32px,4vw,48px);letter-spacing:-.015em}
+
+/* Scroll reveal: only hidden once JS is running (see useScrollEffects), so content never goes missing without it */
+/* It animates `translate` and `scale`, leaving `transform` free for hover lifts and parallax. */
+.reveal-ready [data-reveal]:not(.is-revealed){opacity:0}
+.reveal-ready [data-reveal].is-revealed{animation:reveal-up 1s var(--ease) var(--reveal-delay,0ms) both}
+@keyframes reveal-up{from{opacity:0;translate:0 34px;scale:.985}to{opacity:1;translate:0 0;scale:1}}

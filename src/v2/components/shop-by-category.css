@@ -1,0 +1,118 @@
+/* ---------- Shop by Category ---------- */
+.shop{position:relative;isolation:isolate;overflow:clip;padding:calc(var(--nav-h) + 64px) var(--gutter) 120px;background:#f7ede5}
+.shop.is-embedded{padding-top:104px;padding-bottom:96px}
+/* As its own page: a quiet stretch below the grid, so the petals always have a little scroll to fall through */
+.shop:not(.is-embedded){min-height:calc(100svh + 240px)}
+
+/* Background: plaster warmed by morning light, with soft leaf shadows on the left */
+.shop-light{position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(60% 50% at 85% 0%,rgba(255,249,243,.9),rgba(255,249,243,0) 70%),
+    linear-gradient(#f8efe7,#f6ebe2 60%,#f7ede5)}
+.shop.is-embedded .shop-light{background:linear-gradient(var(--ivory),#f6ebe2 22%,#f7ede5)}
+.shop-shadow{position:absolute;top:-14%;left:-30%;width:min(58vw,840px);color:#5d4131;opacity:.045;filter:blur(9px);will-change:transform}
+.shop-shadow svg{width:100%;height:auto;transform:rotate(58deg) skewX(10deg);transform-origin:40% 40%}
+
+/* The branch enters from outside the top-right corner, never over the heading or cards */
+.shop-branch-anchor{position:absolute;z-index:1;top:calc(var(--nav-h) - 6px);right:0;width:min(19vw,300px);pointer-events:none}
+.shop.is-embedded .shop-branch-anchor{top:12px}
+.shop-branch{transform-origin:100% 0;will-change:transform;mix-blend-mode:multiply}
+.shop-branch img{display:block;width:100%;height:auto;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 22%),linear-gradient(transparent,#000 8%,#000 70%,transparent);-webkit-mask-composite:source-in;
+  mask-image:linear-gradient(90deg,transparent,#000 22%),linear-gradient(transparent,#000 8%,#000 70%,transparent);mask-composite:intersect}
+
+.shop-inner{position:relative;z-index:2;max-width:1300px;margin:0 auto}
+
+/* Header: compact and centred */
+.shop-header{text-align:center;margin:0 auto 44px;max-width:640px}
+.shop-header h1,.shop-header h2{margin:16px 0 0;font-family:var(--serif);font-weight:500;font-size:clamp(40px,4.6vw,64px);line-height:1.05;letter-spacing:-.02em;color:var(--ink)}
+.shop-header em{font-style:italic;font-weight:400;color:var(--rose)}
+.shop-ornament{display:flex;align-items:center;justify-content:center;gap:12px;margin:18px auto 16px;color:var(--rose)}
+.shop-ornament span{width:78px;height:1px;background:linear-gradient(90deg,transparent,rgba(155,79,69,.45))}
+.shop-ornament span:last-child{transform:scaleX(-1)}
+.shop-ornament svg{fill:none;stroke:currentColor;stroke-width:1.1;opacity:.85}
+.shop-ornament circle{fill:currentColor;stroke:none}
+.shop-lede{margin:0;font-size:16.5px;line-height:1.6;color:var(--ink-soft)}
+
+/* Grid: the photographs are the heroes, three of each category's products underneath */
+.shop-grid-motion{will-change:transform}
+.shop-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.category-card{display:flex;flex-direction:column;padding:12px 12px 22px;background:#fcf6f1;border:1px solid rgba(43,36,32,.06);border-radius:18px;
+  box-shadow:0 12px 28px -22px rgba(90,58,40,.45),0 1px 2px rgba(90,58,40,.05);
+  transition:transform .6s var(--ease),box-shadow .6s var(--ease)}
+.category-card:hover{transform:translateY(-4px);box-shadow:0 22px 38px -24px rgba(90,58,40,.5),0 1px 2px rgba(90,58,40,.05)}
+.category-media{display:block;aspect-ratio:586/300;overflow:hidden;border-radius:12px;background:var(--stone)}
+/* The photo is a little larger than its frame so it can drift with the scroll (see data-parallax) */
+.category-media img{width:100%;height:100%;object-fit:cover;transform:translate3d(0,var(--py,0px),0);scale:1.16;transition:scale .9s var(--ease);will-change:transform}
+.category-card:hover .category-media img{scale:1.2}
+
+.category-body{display:flex;align-items:flex-start;gap:16px;justify-content:space-between;padding:20px 10px 18px}
+.category-body h3{margin:0;font-family:var(--serif);font-weight:500;font-size:26px;line-height:1.15;letter-spacing:-.01em;color:var(--ink)}
+.category-body h3 a{color:inherit;text-decoration:none}
+.category-body p{margin:8px 0 0;font-size:15px;line-height:1.55;color:var(--ink-soft)}
+.category-view-all{flex:none;display:inline-flex;align-items:center;gap:8px;margin-top:44px;font-size:15px;font-weight:500;color:var(--rose-deep);text-decoration:none;white-space:nowrap}
+.category-view-all svg{transition:transform .5s var(--ease)}
+.category-view-all:hover svg{transform:translateX(3px)}
+
+.category-products{list-style:none;margin:auto 0 0;padding:0 2px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.product-mini{padding:0;border:0;background:none;font:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column;color:var(--ink);text-decoration:none}
+.product-mini-media{display:block;aspect-ratio:1;overflow:hidden;border-radius:10px;background:var(--stone)}
+.product-mini-media img{display:block;width:100%;height:100%;object-fit:cover}
+.product-mini-name{margin-top:10px;font-size:14px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.product-mini-price{margin-top:6px;font-size:15px;font-weight:500;color:var(--ink)}
+.product-mini:hover .product-mini-name{color:var(--rose-deep)}
+.category-card a:focus-visible{outline-offset:3px;border-radius:8px}
+
+/* Foreground: blossom by the lens in the bottom corners, behind the cards */
+.shop-bokeh{position:absolute;inset:auto 0 0 0;height:0;z-index:1;pointer-events:none;will-change:transform;mix-blend-mode:multiply}
+.shop-bokeh img{position:absolute;bottom:-40px;height:auto;
+  -webkit-mask-image:radial-gradient(ellipse 62% 44% at 30% 55%,#000 35%,transparent 100%),linear-gradient(#000,#000);-webkit-mask-composite:source-in;
+  mask-image:radial-gradient(ellipse 62% 44% at 30% 55%,#000 35%,transparent 100%),linear-gradient(#000,#000);mask-composite:intersect}
+.shop.is-embedded .shop-bokeh img{bottom:30px}
+.shop-bokeh-left{left:-3vw;width:min(15vw,230px)}
+.shop-bokeh-right{right:-4vw;width:min(11vw,170px);transform:scaleX(-1);opacity:.8}
+
+/* ---------- Tablet ---------- */
+@media (max-width:1024px){
+  .shop-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+  .shop-branch-anchor{width:min(26vw,260px)}
+  .category-body h3{font-size:23px}
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width:600px){
+  /* Extra headroom so the smaller branch sits above the heading, not over it */
+  .shop{padding:calc(var(--nav-h) + 96px) 16px 72px}
+  .shop.is-embedded{padding-top:72px;padding-bottom:36px}
+  /* One tall column: the grid's drift would carry the last card past the section's edge, and the photos already move */
+  .shop-grid-motion{transform:none!important}
+  .shop-header{margin-bottom:28px}
+  .shop-header h1,.shop-header h2{font-size:clamp(34px,10vw,44px)}
+  .shop-ornament{margin:14px auto 12px}
+  .shop-ornament span{width:56px}
+  .shop-lede{font-size:15px}
+  .shop-lede br{display:none}
+  .shop-branch-anchor{width:26vw;top:calc(var(--nav-h) - 4px)}
+  .shop-grid{gap:12px}
+  .category-card{padding:10px 10px 18px}
+  .category-body{padding:16px 6px 14px;gap:10px}
+  .category-body h3{font-size:22px}
+  .category-body p{font-size:14px}
+  .category-view-all{margin-top:6px;font-size:14px}
+  .category-products{gap:8px}
+  .product-mini-name{font-size:12.5px}
+  .product-mini-price{font-size:13.5px}
+  .shop-bokeh{display:none}
+}
+/* Too narrow for two cards with product rows side by side */
+@media (max-width:760px){
+  .shop-grid{grid-template-columns:1fr}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .category-card,.category-media img,.category-view-all svg{transition:box-shadow .2s linear}
+  .category-card:hover{transform:none}
+  .category-card:hover .category-media img{scale:1.16}
+  .category-view-all:hover svg{transform:none}
+  .shop-shadow,.shop-branch,.shop-grid-motion,.shop-bokeh{will-change:auto}
+}

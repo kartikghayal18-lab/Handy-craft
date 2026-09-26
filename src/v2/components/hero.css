@@ -1,0 +1,104 @@
+/* ---------- Hero: a quiet studio — plaster wall, stone tabletop, morning light ---------- */
+.hero{--scene-w:min(62vw,1180px);position:relative;isolation:isolate;min-height:max(760px,100svh);padding-top:var(--nav-h);overflow:clip;background:#f4ebe2}
+
+/* Background: the wall, brightest where the window light falls on the left, matched to the photograph's plaster. Slowest layer. */
+.hero-light{position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(55% 60% at 18% 30%,rgba(255,250,243,.8),rgba(255,250,243,0) 70%),
+    linear-gradient(90deg,#f9f0e6,#f3eae1 45%,#f0e7de)}
+/* Two soft shafts of window light across the wall */
+.hero-light::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(116deg,transparent 8%,rgba(255,253,248,.5) 15%,transparent 23%,transparent 30%,rgba(255,253,248,.35) 36%,transparent 43%)}
+.hero-light::after{content:'';position:absolute;inset:0;opacity:.35;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .3 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.hero-shadow{position:absolute;top:-30%;left:-16%;width:min(66vw,960px);color:#5d4131;opacity:.05;filter:blur(8px);will-change:transform}
+.hero-shadow svg{width:100%;height:auto;transform:scaleX(-1) rotate(-22deg) skewX(14deg);transform-origin:50% 30%}
+
+/* The tabletop continues the stone surface in the photograph across the whole width */
+.hero-table{position:absolute;left:0;right:0;bottom:0;top:calc(var(--scene-w) * .69);z-index:0;pointer-events:none;
+  background:linear-gradient(rgba(245,234,223,0),#f5eadf 14%,#f8f0e7 55%,var(--ivory))}
+.hero-table::before{content:'';position:absolute;inset:0;background:linear-gradient(104deg,transparent 14%,rgba(255,255,255,.45) 24%,transparent 36%);-webkit-mask-image:linear-gradient(transparent,#000 35%,#000 55%,transparent);mask-image:linear-gradient(transparent,#000 35%,#000 55%,transparent)}
+
+/* Midground: the photographed scene, feathered into the wall on its left and the table below */
+.hero-scene{position:absolute;z-index:1;top:0;right:0;width:var(--scene-w);margin:0;pointer-events:none}
+.hero-scene-motion{will-change:transform}
+.hero-scene img{width:100%;height:auto;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 22%),linear-gradient(transparent,#000 5%,#000 80%,transparent);
+  -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(90deg,transparent,#000 22%),linear-gradient(transparent,#000 5%,#000 80%,transparent);
+  mask-composite:intersect}
+
+.hero-inner{position:relative;z-index:2;max-width:1360px;min-height:calc(var(--scene-w) * .78 - var(--nav-h));margin:0 auto;padding:0 var(--gutter);display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:center}
+
+/* Copy */
+.hero-copy{position:relative;z-index:3;padding:36px 0 28px;will-change:transform,opacity}
+.hero-label{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.hero-label span{white-space:nowrap}
+.hero-label i{font-style:normal;font-size:8.5px;margin-right:12px;vertical-align:1px}
+.hero-copy h1{margin:26px 0 26px;font-family:var(--serif);font-weight:500;font-size:clamp(46px,5.4vw,82px);line-height:1.01;letter-spacing:-.018em;color:var(--ink)}
+.hero-copy h1 em{font-style:italic;font-weight:400;color:var(--rose);letter-spacing:-.01em}
+.hero-lede{max-width:22em;margin:0;font-size:17.5px;line-height:1.6;color:var(--ink-soft)}
+.hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:36px}
+.hero-actions .button-quiet{border-radius:6px}
+
+/* Promises, set on the table */
+.hero-promises{position:relative;z-index:3;display:flex;justify-content:center;margin:clamp(8px,3vh,40px) auto 0;padding:0 var(--gutter) 110px;list-style:none}
+.hero-promises li{display:flex;align-items:center;gap:14px;padding:4px 34px;font-size:13.5px;line-height:1.3;color:var(--ink-soft);white-space:nowrap}
+.hero-promises li+li{border-left:1px solid var(--line)}
+.hero-promises svg{flex:none;color:var(--rose)}
+.hero-promises span{display:flex;flex-direction:column}
+.hero-scroll{position:absolute;z-index:3;left:50%;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:12px;font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-soft)}
+.hero-scroll i{width:1px;height:34px;background:linear-gradient(var(--ink-faint),transparent)}
+
+/* Foreground: blossom right by the lens. Fastest scenery layer. */
+/* Sits under the copy layer, so the text always reads cleanly over it */
+.hero-sprig{position:absolute;z-index:1;left:-3vw;bottom:0;width:min(15vw,250px);pointer-events:none;will-change:transform;transform-origin:0 100%;mix-blend-mode:multiply}
+.hero-sprig img{width:100%;height:auto;
+  -webkit-mask-image:radial-gradient(ellipse 62% 44% at 30% 55%,#000 35%,transparent 100%),linear-gradient(#000,#000);-webkit-mask-composite:source-in;
+  mask-image:radial-gradient(ellipse 62% 44% at 30% 55%,#000 35%,transparent 100%),linear-gradient(#000,#000);mask-composite:intersect}
+
+/* ---------- Tablet ---------- */
+@media (max-width:1099px){
+  .hero{--scene-w:66vw}
+  .hero-copy h1{font-size:clamp(44px,5.8vw,64px)}
+  .hero-lede{font-size:16.5px;max-width:19em}
+  .hero-promises li{padding:4px 20px;gap:10px;font-size:12.5px}
+}
+@media (max-height:820px) and (min-width:901px){ .hero-scroll{display:none} .hero-promises{padding-bottom:48px} }
+
+/* ---------- Stacked (small tablet + mobile) ---------- */
+@media (max-width:900px){
+  .hero{min-height:0;--scene-w:118vw}
+  .hero-light .hero-shadow,.hero-sprig,.hero-scroll,.hero-table{display:none}
+  .hero-inner{grid-template-columns:minmax(0,1fr);min-height:0}
+  .hero-copy{padding:44px 0 8px;max-width:560px}
+  /* Wider than the screen so the mug, frame and vase read at phone size; the bare wall and linen edge crop away */
+  .hero-scene{position:relative;right:auto;margin:-2vw 0 0 -10vw}
+  .hero-scene img{
+    -webkit-mask-image:linear-gradient(transparent,#000 14%,#000 82%,transparent);mask-image:linear-gradient(transparent,#000 14%,#000 82%,transparent);
+    -webkit-mask-composite:source-over;mask-composite:add}
+  /* Above the petal layer: on stacked layouts petals fall past this row, never over it */
+  .hero-promises{z-index:41;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 0;max-width:560px;margin:4px auto 0;padding:0 var(--gutter) 48px}
+  .hero-promises li{padding:4px 12px;gap:10px;font-size:13px}
+  .hero-promises li+li{border-left:0}
+  .hero-promises li:nth-child(even){border-left:1px solid var(--line)}
+}
+@media (max-width:560px){
+  .hero-copy{padding-top:34px}
+  .hero-copy h1{font-size:clamp(40px,12vw,54px);margin:20px 0 18px}
+  .hero-label{gap:4px 5px;font-size:9px;letter-spacing:.1em}
+  .hero-label i{margin-right:4px}
+  .hero-lede{font-size:16px}
+  .hero-actions{margin-top:28px}
+  .hero-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .hero-actions .button{padding:0 12px;font-size:14.5px}
+}
+
+@media (max-width:359px){
+  .hero-actions{grid-template-columns:1fr}
+}
+
+/* ---------- Reduced motion: same scene, perfectly still ---------- */
+@media (prefers-reduced-motion:reduce){
+  .hero-shadow,.hero-scene-motion,.hero-sprig,.hero-copy{will-change:auto}
+}

@@ -1,0 +1,22 @@
+/* ---------- Bottom tab bar: phones only ---------- */
+.bottom-bar{display:none}
+
+@media (max-width:760px){
+  :root{--bottom-bar-h:78px}
+  body{padding-bottom:calc(var(--bottom-bar-h) + env(safe-area-inset-bottom))}
+  .bottom-bar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:grid;grid-template-columns:repeat(5,1fr);
+    padding:10px 8px calc(8px + env(safe-area-inset-bottom));border-radius:26px 26px 0 0;
+    background:rgba(250,245,239,.92);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);
+    border:1px solid rgba(155,79,69,.1);border-bottom:0;box-shadow:0 -12px 30px -18px rgba(90,58,40,.35)}
+  .bottom-tab{display:flex;flex-direction:column;align-items:center;gap:5px;min-height:58px;color:#5a4a42;-webkit-tap-highlight-color:transparent}
+  .bottom-tab-icon{position:relative;display:grid;place-items:center;width:60px;height:36px;border-radius:18px;transition:background-color .35s var(--ease),transform .35s var(--ease)}
+  .bottom-tab-label{font-size:13px;letter-spacing:.01em;line-height:1}
+  .bottom-tab.is-active{color:#6a1f2b}
+  .bottom-tab.is-active .bottom-tab-icon{background:#f3ddd8}
+  .bottom-tab.is-active .bottom-tab-label{font-weight:500}
+  .bottom-tab:active .bottom-tab-icon{transform:scale(.92)}
+  .bottom-tab-badge{position:absolute;top:0;right:10px;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--rose-deep);color:#fff;font-size:10px;font-weight:500;line-height:17px;text-align:center}
+  /* The cart lives in the bottom bar on phones */
+  .nav-bag{display:none}
+}
+@media (prefers-reduced-motion:reduce){.bottom-tab-icon{transition:background-color .2s linear}}

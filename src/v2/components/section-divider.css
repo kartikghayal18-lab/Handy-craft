@@ -1,0 +1,14 @@
+/* A flowering vine between homepage sections; its background matches the section above. */
+.section-divider{position:relative;z-index:3;background:#f7ede5;padding:8px 0}
+.section-divider svg{display:block;width:100%;max-width:1240px;height:clamp(110px,13vw,170px);margin:0 auto}
+.divider-bloom{transform-box:fill-box;transform-origin:center;animation:divider-turn 26s linear infinite}
+@keyframes divider-turn{to{transform:rotate(360deg)}}
+/* As it scrolls into view the vine grows out from the medallion and the flowers open along it */
+.reveal-ready .section-divider .divider-vine path{stroke-dasharray:1;stroke-dashoffset:1}
+.reveal-ready .section-divider.is-revealed .divider-vine path{animation:divider-grow 1.6s var(--ease) .15s forwards}
+@keyframes divider-grow{to{stroke-dashoffset:0}}
+.divider-pop{transform-box:fill-box;transform-origin:center}
+.reveal-ready .section-divider:not(.is-revealed) .divider-pop{opacity:0}
+.reveal-ready .section-divider.is-revealed .divider-pop{animation:divider-open .8s var(--ease) var(--d) both}
+@keyframes divider-open{from{opacity:0;scale:.2}to{opacity:1;scale:1}}
+@media (prefers-reduced-motion:reduce){.divider-bloom{animation:none}}

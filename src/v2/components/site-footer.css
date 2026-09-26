@@ -1,0 +1,30 @@
+/* ---------- Site footer: deep rosewood, warm ivory type ---------- */
+.site-footer{position:relative;z-index:3;background:#3b201c;color:#f3e6dc;padding:64px var(--gutter) 40px}
+.site-footer::before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,transparent,rgba(237,201,195,.35),transparent)}
+.site-footer-inner{max-width:1180px;margin:0 auto}
+
+.footer-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:32px}
+.footer-brand{display:inline-flex;align-items:center;gap:12px;justify-self:start;font-family:var(--serif);font-size:26px;font-weight:500;letter-spacing:-.015em;color:#fbf1ea}
+.footer-mark{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#f8efe8;box-shadow:0 0 0 4px rgba(248,239,232,.1)}
+.footer-links{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 30px;font-size:15px}
+.footer-links a{color:#e8d6cb;transition:color .3s var(--ease)}
+.footer-links a:hover{color:#fff}
+.footer-whatsapp{justify-self:end;display:inline-flex;align-items:center;gap:10px;min-height:48px;padding:0 24px;border:1px solid rgba(243,230,220,.45);border-radius:999px;font-size:15px;color:#fbf1ea;
+  transition:background-color .3s var(--ease),border-color .3s var(--ease)}
+.footer-whatsapp:hover{background:rgba(243,230,220,.08);border-color:#f3e6dc}
+
+.footer-bottom{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px 32px;margin-top:44px;padding-top:26px;border-top:1px solid rgba(243,230,220,.12)}
+.footer-tagline{margin:0;font-family:var(--serif);font-style:italic;font-size:18px;color:#e8d6cb}
+.footer-copy{margin:0;font-size:13.5px;color:rgba(243,230,220,.62)}
+.site-footer :focus-visible{outline-color:#edc9c3}
+
+@media (max-width:900px){
+  .footer-top{grid-template-columns:1fr;justify-items:center;text-align:center}
+  .footer-brand,.footer-whatsapp{justify-self:center}
+  .footer-bottom{flex-direction:column;align-items:center;text-align:center}
+}
+@media (max-width:600px){
+  .site-footer{padding:52px 16px 32px}
+  .footer-links{gap:10px 22px;font-size:14.5px}
+  .footer-tagline{font-size:16.5px}
+}
