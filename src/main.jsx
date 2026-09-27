@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-// ⌘⇧O (Mac) / Ctrl+Shift+O (Windows) opens the admin panel
+// ⌘⇧O (Mac) / Ctrl+Shift+O (Windows), or 5 taps on the header brand, opens the admin panel
 import './adminShortcut.js';
 // Styles for the product popup, cart and checkout, confined to .hk-commerce (see src/commerce.css)
 import './commerce.css';
@@ -96,7 +96,7 @@ function Icon({ name, size = 20 }) {
 }
 
 function BrandLogo({ href = '#top' }) {
-  return <a className="brand" href={href} aria-label="Forever Handy home"><img src="/forever-handy-mark.svg" alt=""/><span>Forever Handy</span></a>;
+  return <a className="brand" href={href} aria-label="Forever Handy home"><img src="/logo-mark.png" alt=""/><span>Forever Handy</span></a>;
 }
 
 function ProductArt({ kind, large = false, image }) { return <div className={`product-art ${kind} ${large ? 'large' : ''}`} aria-label="Photograph of a handmade Forever Handy gift" role="img"><img src={image || '/images/memory-kraft-collection.png'} alt=""/></div>; }

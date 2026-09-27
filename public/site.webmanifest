@@ -8,9 +8,9 @@
   "theme_color": "#fbf7f1",
   "icons": [
     {
-      "src": "/forever-handy-mark.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/logo-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

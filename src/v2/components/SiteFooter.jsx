@@ -18,7 +18,7 @@ export default function SiteFooter() {
       <div className="site-footer-inner" data-reveal>
         <div className="footer-top">
           <Link className="footer-brand" to="/" aria-label="Forever Handy home">
-            <span className="footer-mark"><img src="/mark.svg" alt="" width="28" height="28" /></span>
+            <span className="footer-mark"><img src="/logo-mark.png" alt="" width="34" height="34" /></span>
             <span>Forever Handy</span>
           </Link>
           <nav className="footer-links" aria-label="Footer">

@@ -15,3 +15,24 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   window.location.assign('/admin/dashboard');
 }, true);
+
+/**
+ * Touch equivalent for phones: tap the "Forever Handy" brand in the header 5 times within 3 seconds.
+ * Earlier taps behave normally (go home); the 5th opens /admin, where sign-in is still required.
+ */
+const TAPS_NEEDED = 5;
+const TAP_WINDOW_MS = 3000;
+let taps = [];
+
+document.addEventListener('click', event => {
+  const brand = event.target.closest?.('.brand');
+  if (!brand) return;
+  const now = Date.now();
+  taps = taps.filter(time => now - time < TAP_WINDOW_MS);
+  taps.push(now);
+  if (taps.length < TAPS_NEEDED) return;
+  taps = [];
+  event.preventDefault();
+  event.stopPropagation();
+  window.location.assign('/admin/dashboard');
+}, true);

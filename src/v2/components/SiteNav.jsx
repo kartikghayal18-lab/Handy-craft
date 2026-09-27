@@ -27,7 +27,7 @@ export default function SiteNav({ path = '/' }) {
     <header className={`site-nav ${scrolled ? 'is-scrolled' : ''}`}>
       <div className="site-nav-inner">
         <button className="nav-icon nav-menu" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}><Icon name="menu" /></button>
-        <Link className="brand" to="/" aria-label="Forever Handy home"><img src="/mark.svg" alt="" width="30" height="30" /><span>Forever Handy</span></Link>
+        <Link className="brand" to="/" aria-label="Forever Handy home"><img src="/logo-mark.png" alt="" width="40" height="40" /><span>Forever Handy</span></Link>
         <nav className="nav-links" aria-label="Primary">{LINKS.map(link => <Link key={link.label} to={link.href} aria-current={path === link.href ? 'page' : undefined}>{link.label}</Link>)}</nav>
         <div className="nav-actions">
           <button className="nav-icon nav-search" aria-label="Search gifts" onClick={() => navigate('/gifts?search=1')}><Icon name="search" /></button>

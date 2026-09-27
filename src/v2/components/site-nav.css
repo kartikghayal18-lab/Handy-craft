@@ -3,8 +3,8 @@
 .site-nav.is-scrolled{background:rgba(248,241,234,.96);box-shadow:0 1px 0 var(--line)}
 .site-nav.is-scrolled::after{opacity:0}
 .site-nav-inner{height:var(--nav-h);max-width:1360px;margin:0 auto;padding:0 var(--gutter);display:flex;align-items:center;gap:40px}
-.brand{display:inline-flex;align-items:center;gap:10px;font-family:var(--serif);font-size:23px;font-weight:500;letter-spacing:-.015em;white-space:nowrap}
-.brand img{width:30px;height:30px}
+.brand{touch-action:manipulation;display:inline-flex;align-items:center;gap:10px;font-family:var(--serif);font-size:23px;font-weight:500;letter-spacing:-.015em;white-space:nowrap}
+.brand img{width:40px;height:40px;object-fit:contain}
 .nav-links{display:flex;gap:38px;margin:0 auto;font-size:14.5px;color:var(--ink-soft)}
 .nav-links a{position:relative;padding:6px 0;transition:color .3s var(--ease)}
 .nav-links a::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .45s var(--ease)}
@@ -24,7 +24,7 @@
   .nav-links,.nav-search{display:none}
   .nav-menu{display:grid;margin-left:-10px}
   .brand{font-size:20px;margin-right:auto}
-  .brand img{width:26px;height:26px}
+  .brand img{width:34px;height:34px}
   .nav-actions{gap:0;margin-right:-8px}
   .nav-sheet{display:flex;flex-direction:column;padding:6px var(--gutter) 18px;background:var(--ivory);border-bottom:1px solid var(--line)}
   .nav-sheet a{padding:13px 0;font-family:var(--serif);font-size:22px;border-bottom:1px solid var(--line)}
